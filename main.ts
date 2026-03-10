@@ -319,6 +319,20 @@ export default class GameBacklogPlugin extends Plugin {
 				}, game).open();
 			});
 
+			if (game.platinum) {
+				const platinumBadge = coverContainer.createEl('img', {
+					cls: 'game-platinum-badge',
+					attr: {
+						src: this.getPluginAssetUrl('Platinum.png'),
+						alt: 'Platinum badge'
+					}
+				});
+
+				platinumBadge.onerror = () => {
+					platinumBadge.remove();
+				};
+			}
+
 			// Brand logo overlay en borde inferior derecho
 			const brandContainer = card.createDiv({ cls: 'game-brand-logo' });
 			
