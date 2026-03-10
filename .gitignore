@@ -1,0 +1,13 @@
+# Node
+node_modules
+
+# Build
+main.js
+*.js.map
+
+# IDE
+.idea
+.vscode
+
+# Obsidian
+data.json

@@ -1,0 +1,220 @@
+/* Contenedor principal */
+.game-backlog-container {
+	padding: 20px;
+	margin: 20px 0;
+}
+
+/* Grilla de juegos */
+.game-backlog-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(228px, 228px));
+	justify-content: center;
+	gap: 25px;
+	margin-bottom: 30px;
+}
+
+/* Tarjeta individual */
+.game-card {
+	background: var(--background-secondary);
+	border-radius: 12px;
+	overflow: hidden;
+	width: 228px;
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+	transition: transform 0.2s ease, box-shadow 0.2s ease;
+	cursor: default;
+}
+
+.game-card-platinum {
+	border: 4px solid #ffd700;
+	box-shadow: 0 0 0 1px #fff2b3, 0 0 12px rgba(255, 215, 0, 0.85), 0 0 24px rgba(255, 215, 0, 0.45), 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.game-media-row {
+	display: flex;
+	align-items: stretch;
+}
+
+.game-card:hover {
+	transform: translateY(-5px);
+	box-shadow: 0 8px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Contenedor de portada */
+.game-cover-container {
+	width: 188px;
+	height: 253px;
+	overflow: hidden;
+	background: var(--background-modifier-border);
+	position: relative;
+}
+
+.game-brand-strip {
+	width: 40px;
+	height: 253px;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+}
+
+.game-brand-image {
+	max-width: 100%;
+	height: 100%;
+	object-fit: contain;
+	display: block;
+	transform-origin: center center;
+	box-shadow: none !important;
+	filter: none !important;
+}
+
+.game-cover {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+	transition: filter 0.2s ease;
+}
+
+.game-name-overlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	padding: 12px;
+	font-size: 15px;
+	font-weight: 700;
+	line-height: 1.3;
+	color: #ffffff;
+	background: rgba(0, 0, 0, 0.58);
+	opacity: 0;
+	transition: opacity 0.2s ease;
+}
+
+.game-card:hover .game-name-overlay {
+	opacity: 1;
+}
+
+.game-card:hover .game-cover {
+	filter: brightness(0.6);
+}
+
+/* Información del juego */
+.game-info {
+	padding: 10px 12px;
+}
+
+/* Rating (estrellas) */
+.game-rating {
+	display: flex;
+	gap: 3px;
+	margin-bottom: 6px;
+	font-size: 18px;
+}
+
+.star {
+	transition: color 0.2s ease;
+}
+
+.star.filled {
+	color: #FFD700;
+}
+
+.star.empty {
+	color: var(--text-faint);
+}
+
+/* Detalles (fecha y plataforma) */
+.game-details {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	font-size: 13px;
+	color: var(--text-muted);
+}
+
+.game-date,
+.game-platform {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+}
+
+/* Botón para agregar juego */
+.game-add-button {
+	display: flex;
+	justify-content: center;
+	margin-top: 20px;
+}
+
+.game-add-button button {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border: none;
+	border-radius: 8px;
+	padding: 12px 30px;
+	font-size: 15px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.game-add-button button:hover {
+	background: var(--interactive-accent-hover);
+	transform: translateY(-2px);
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.game-add-button button:active {
+	transform: translateY(0);
+}
+
+/* Responsive - tablets */
+@media (max-width: 768px) {
+	.game-backlog-grid {
+		grid-template-columns: repeat(auto-fill, minmax(228px, 228px));
+		justify-content: center;
+		gap: 20px;
+	}
+	
+	.game-info {
+		padding: 9px 11px;
+	}
+}
+
+/* Responsive - móviles */
+@media (max-width: 480px) {
+	.game-backlog-grid {
+		grid-template-columns: repeat(auto-fill, minmax(228px, 228px));
+		justify-content: center;
+		gap: 15px;
+	}
+	
+	.game-info {
+		padding: 8px 10px;
+	}
+	
+	.game-rating {
+		font-size: 14px;
+	}
+	
+	.game-details {
+		font-size: 11px;
+	}
+}
+
+/* Tema oscuro mejorado */
+.theme-dark .game-card {
+	background: var(--background-secondary-alt);
+	border: 1px solid var(--background-modifier-border);
+}
+
+/* Tema claro mejorado */
+.theme-light .game-card {
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+}
