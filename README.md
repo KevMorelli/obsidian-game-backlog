@@ -6,8 +6,11 @@ Plugin para renderizar tu backlog de videojuegos completados en una hermosa gril
 
 - **Grilla visual** de tarjetas con imágenes y detalles
 - **Sistema de puntuación** con estrellas (1-5)
-- **Información completa**: nombre, portada, fecha, plataforma
-- **Modal integrado** para agregar juegos fácilmente
+- **Plataformas predefinidas** (10 consolas/sistemas incluidas)
+- **Logos automáticos** según la plataforma seleccionada
+- **Información completa**: nombre, portada, fecha, plataforma, horas jugadas
+- **Logro de Platino**: marca especial para juegos completados 100%
+- **Modal integrado** para agregar y editar juegos fácilmente
 - **Responsive**: se adapta a diferentes tamaños de pantalla
 - **Temas**: compatible con tema claro y oscuro
 

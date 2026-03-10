@@ -1,35 +1,40 @@
 import { App, Plugin, PluginSettingTab, Setting, MarkdownPostProcessorContext, Modal, Notice, TFile } from 'obsidian';
 
+enum GamePlatform {
+	SWITCH = 'Switch',
+	PC = 'PC',
+	STEAM_DECK = 'Steam Deck',
+	PS_VITA = 'PS Vita',
+	PS2 = 'PS2',
+	PS1 = 'PS1',
+	NINTENDO_3DS = '3DS',
+	NINTENDO_DS = 'DS',
+	GBA = 'GBA'
+}
+
 interface GameEntry {
+	id: string;
 	name: string;
 	cover: string;
-	brandImage: string;
 	rating: number;
 	completionDate: string;
-	platform: string;
+	platform: GamePlatform;
 	platinum: boolean;
+	hours: number;
+}
+
+function generateGameId(): string {
+	return `game-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 interface GameBacklogSettings {
 	defaultCoverImage: string;
-	defaultBrandImage: string;
-	brandStripBackgroundColor: string;
-	brandLogoScale: number;
-	brandLogoPaddingLeft: number;
-	brandLogoPaddingRight: number;
-	brandLogoPaddingTop: number;
-	brandLogoPaddingBottom: number;
+	showPlatform: boolean;
 }
 
 const DEFAULT_SETTINGS: GameBacklogSettings = {
 	defaultCoverImage: 'https://via.placeholder.com/300x400?text=No+Cover',
-	defaultBrandImage: '',
-	brandStripBackgroundColor: '#1f1f1f',
-	brandLogoScale: 100,
-	brandLogoPaddingLeft: 0,
-	brandLogoPaddingRight: 0,
-	brandLogoPaddingTop: 0,
-	brandLogoPaddingBottom: 0
+	showPlatform: true
 }
 
 export default class GameBacklogPlugin extends Plugin {
@@ -45,12 +50,13 @@ export default class GameBacklogPlugin extends Plugin {
 				const defaultBlock = [
 					'```game-backlog',
 					'---',
+					'id: ',
 					'name: ',
 					'cover: ',
-					'brand: ',
 					'rating: 3',
 					'date: ',
-					'platform: ',
+					'platform: Switch',
+					'hours: 0',
 					'platinum: false',
 					'```'
 				].join('\n');
@@ -98,8 +104,14 @@ export default class GameBacklogPlugin extends Plugin {
 			if (trimmed.startsWith('---')) {
 				// Nuevo juego
 				if (currentGame.name) {
+					if (!currentGame.id) {
+						currentGame.id = generateGameId();
+					}
 					if (typeof currentGame.platinum !== 'boolean') {
 						currentGame.platinum = false;
+					}
+					if (typeof currentGame.hours !== 'number') {
+						currentGame.hours = 0;
 					}
 					entries.push(currentGame as GameEntry);
 				}
@@ -113,6 +125,9 @@ export default class GameBacklogPlugin extends Plugin {
 			if (!value) continue;
 			
 			switch (key.toLowerCase()) {
+				case 'id':
+					currentGame.id = value;
+					break;
 				case 'name':
 				case 'nombre':
 					currentGame.name = value;
@@ -120,11 +135,6 @@ export default class GameBacklogPlugin extends Plugin {
 				case 'cover':
 				case 'portada':
 					currentGame.cover = value;
-					break;
-				case 'brand':
-				case 'brandimage':
-				case 'marca':
-					currentGame.brandImage = value;
 					break;
 				case 'rating':
 				case 'puntuacion':
@@ -137,7 +147,11 @@ export default class GameBacklogPlugin extends Plugin {
 					break;
 				case 'platform':
 				case 'plataforma':
-					currentGame.platform = value;
+					currentGame.platform = this.parsePlatform(value);
+					break;
+				case 'hours':
+				case 'horas':
+					currentGame.hours = parseFloat(value) || 0;
 					break;
 				case 'platinum':
 				case 'platinado':
@@ -148,8 +162,14 @@ export default class GameBacklogPlugin extends Plugin {
 		
 		// Agregar el último juego si existe
 		if (currentGame.name) {
+			if (!currentGame.id) {
+				currentGame.id = generateGameId();
+			}
 			if (typeof currentGame.platinum !== 'boolean') {
 				currentGame.platinum = false;
+			}
+			if (typeof currentGame.hours !== 'number') {
+				currentGame.hours = 0;
 			}
 			entries.push(currentGame as GameEntry);
 		}
@@ -157,13 +177,81 @@ export default class GameBacklogPlugin extends Plugin {
 		return entries;
 	}
 
+	parsePlatform(value: string): GamePlatform {
+		const normalized = value.toLowerCase().trim();
+		const platformMap: { [key: string]: GamePlatform } = {
+			'switch': GamePlatform.SWITCH,
+			'nintendo switch': GamePlatform.SWITCH,
+			'pc': GamePlatform.PC,
+			'windows': GamePlatform.PC,
+			'steam deck': GamePlatform.STEAM_DECK,
+			'steamdeck': GamePlatform.STEAM_DECK,
+			'ps vita': GamePlatform.PS_VITA,
+			'vita': GamePlatform.PS_VITA,
+			'ps2': GamePlatform.PS2,
+			'playstation 2': GamePlatform.PS2,
+			'playstation2': GamePlatform.PS2,
+			'ps1': GamePlatform.PS1,
+			'playstation 1': GamePlatform.PS1,
+			'playstation1': GamePlatform.PS1,
+			'3ds': GamePlatform.NINTENDO_3DS,
+			'nintendo 3ds': GamePlatform.NINTENDO_3DS,
+			'ds': GamePlatform.NINTENDO_DS,
+			'nintendo ds': GamePlatform.NINTENDO_DS,
+			'gba': GamePlatform.GBA,
+			'game boy advance': GamePlatform.GBA
+		};
+		return platformMap[normalized] || GamePlatform.SWITCH;
+	}
+
+	getPlatformLogo(platform: GamePlatform): string {
+		const logoMap: { [key in GamePlatform]: string } = {
+			[GamePlatform.SWITCH]: 'Switch.png',
+			[GamePlatform.PC]: 'PC.png',
+			[GamePlatform.STEAM_DECK]: 'Steam Deck.png',
+			[GamePlatform.PS_VITA]: 'PS Vita.png',
+			[GamePlatform.PS2]: 'PS2.png',
+			[GamePlatform.PS1]: 'PS1.png',
+			[GamePlatform.NINTENDO_3DS]: '3DS.png',
+			[GamePlatform.NINTENDO_DS]: 'DS.png',
+			[GamePlatform.GBA]: 'GBA.png'
+		};
+		return logoMap[platform] || '';
+	}
+
+	getPluginAssetUrl(fileName: string): string {
+		if (!fileName) return '';
+
+		const assetPath = `${this.app.vault.configDir}/plugins/${this.manifest.id}/assets/${fileName}`;
+		const adapter = this.app.vault.adapter as unknown as { getResourcePath?: (path: string) => string };
+
+		if (typeof adapter.getResourcePath === 'function') {
+			return adapter.getResourcePath(assetPath);
+		}
+
+		return assetPath;
+	}
+
 	resolveImageSource(rawPath: string): string {
 		if (!rawPath) return '';
 
+		// Si es una URL o data URI, retornar directamente
 		if (/^(https?:\/\/|data:|app:|blob:)/i.test(rawPath)) {
 			return rawPath;
 		}
 
+		// Si comienza con .obsidian/, es relativo al vault root
+		if (rawPath.startsWith('.obsidian/')) {
+			const file = this.app.vault.getAbstractFileByPath(rawPath);
+			if (file instanceof TFile) {
+				return this.app.vault.getResourcePath(file);
+			}
+			// Si no encuentra el archivo, retornar la ruta como está
+			// (puede que no exista durante desarrollo)
+			return rawPath;
+		}
+
+		// Intentar resolver como enlace o ruta de archivo del vault
 		const linked = this.app.metadataCache.getFirstLinkpathDest(rawPath, '');
 		if (linked instanceof TFile) {
 			return this.app.vault.getResourcePath(linked);
@@ -203,10 +291,8 @@ export default class GameBacklogPlugin extends Plugin {
 				card.addClass('game-card-platinum');
 			}
 			
-			const mediaRow = card.createDiv({ cls: 'game-media-row' });
-
 			// Imagen de portada
-			const coverContainer = mediaRow.createDiv({ cls: 'game-cover-container' });
+			const coverContainer = card.createDiv({ cls: 'game-cover-container' });
 			const cover = coverContainer.createEl('img', { 
 				cls: 'game-cover',
 				attr: {
@@ -220,10 +306,23 @@ export default class GameBacklogPlugin extends Plugin {
 				cover.src = this.resolveImageSource(this.settings.defaultCoverImage);
 			};
 
-			const brandContainer = mediaRow.createDiv({ cls: 'game-brand-strip' });
-			brandContainer.style.backgroundColor = this.settings.brandStripBackgroundColor;
-			brandContainer.style.padding = `${this.settings.brandLogoPaddingTop}px ${this.settings.brandLogoPaddingRight}px ${this.settings.brandLogoPaddingBottom}px ${this.settings.brandLogoPaddingLeft}px`;
-			const brandImageSource = this.resolveImageSource(game.brandImage || this.settings.defaultBrandImage);
+			const nameOverlay = coverContainer.createDiv({ cls: 'game-name-overlay' });
+			nameOverlay.textContent = game.name || 'Sin nombre';
+
+			// Botón de editar
+			const editButton = coverContainer.createDiv({ cls: 'game-edit-button' });
+			editButton.innerHTML = '✏';
+			editButton.addEventListener('click', (e) => {
+				e.stopPropagation();
+				new AddGameModal(this.app, (editedGame) => {
+					this.editGameInFile(ctx, game, editedGame);
+				}, game).open();
+			});
+
+			// Brand logo overlay en borde inferior derecho
+			const brandContainer = card.createDiv({ cls: 'game-brand-logo' });
+			
+			const brandImageSource = this.getPluginAssetUrl(this.getPlatformLogo(game.platform));
 			if (brandImageSource) {
 				const brandImage = brandContainer.createEl('img', {
 					cls: 'game-brand-image',
@@ -232,15 +331,14 @@ export default class GameBacklogPlugin extends Plugin {
 						alt: game.platform || 'Platform brand'
 					}
 				});
-				brandImage.style.transform = `scale(${Math.max(0, Math.min(100, this.settings.brandLogoScale)) / 100})`;
 
 				brandImage.onerror = () => {
 					brandImage.remove();
 				};
-			}
 
-			const nameOverlay = coverContainer.createDiv({ cls: 'game-name-overlay' });
-			nameOverlay.textContent = game.name || 'Sin nombre';
+				const platformLabel = brandContainer.createDiv({ cls: 'game-brand-platform-label' });
+				platformLabel.textContent = game.platform || '';
+			}
 			
 			// Información del juego
 			const info = card.createDiv({ cls: 'game-info' });
@@ -260,6 +358,13 @@ export default class GameBacklogPlugin extends Plugin {
 			if (game.completionDate) {
 				const date = details.createDiv({ cls: 'game-date' });
 				date.textContent = `📅 ${this.formatCompletionDate(game.completionDate)}`;
+			}
+
+
+
+			if (game.hours && game.hours > 0) {
+				const hours = details.createDiv({ cls: 'game-hours' });
+				hours.textContent = `⏱️ ${game.hours} hs`;
 			}
 			
 		});
@@ -286,7 +391,8 @@ export default class GameBacklogPlugin extends Plugin {
 		const match = content.match(codeBlockRegex);
 		
 		if (match) {
-			const newEntry = `\n---\nname: ${game.name}\ncover: ${game.cover}\nbrand: ${game.brandImage}\nrating: ${game.rating}\ndate: ${game.completionDate}\nplatform: ${game.platform}\nplatinum: ${game.platinum}\n`;
+			const gameId = game.id || generateGameId();
+			const newEntry = `\n---\nid: ${gameId}\nname: ${game.name}\ncover: ${game.cover}\nrating: ${game.rating}\ndate: ${game.completionDate}\nplatform: ${game.platform}\nhours: ${game.hours}\nplatinum: ${game.platinum}\n`;
 			const updatedBlock = match[1] + newEntry;
 			const newContent = content.replace(codeBlockRegex, `\`\`\`game-backlog\n${updatedBlock}\`\`\``);
 			
@@ -294,33 +400,109 @@ export default class GameBacklogPlugin extends Plugin {
 			new Notice('Juego agregado al backlog');
 		}
 	}
+
+	async editGameInFile(ctx: MarkdownPostProcessorContext, oldGame: GameEntry, newGame: GameEntry) {
+		const file = this.app.vault.getAbstractFileByPath(ctx.sourcePath);
+		if (!(file instanceof TFile)) return;
+		
+		const content = await this.app.vault.read(file);
+		
+		// Buscar el bloque de código game-backlog
+		const codeBlockRegex = /```game-backlog\n([\s\S]*?)```/;
+		const match = content.match(codeBlockRegex);
+		
+		if (match) {
+			const oldId = oldGame.id || '';
+			const stableId = newGame.id || oldId || generateGameId();
+
+			const newEntry = `---\nid: ${stableId}\nname: ${newGame.name}\ncover: ${newGame.cover}\nrating: ${newGame.rating}\ndate: ${newGame.completionDate}\nplatform: ${newGame.platform}\nhours: ${newGame.hours}\nplatinum: ${newGame.platinum}\n`;
+
+			const originalBlock = match[1];
+			const entries = originalBlock.match(/---\s*\n[\s\S]*?(?=(?:\n---\s*\n)|$)/g) || [];
+
+			let entryIndex = -1;
+
+			if (oldId) {
+				entryIndex = entries.findIndex((entry) => {
+					const idMatch = entry.match(/^id:\s*(.+)$/im);
+					return (idMatch?.[1] || '').trim() === oldId;
+				});
+			}
+
+			if (entryIndex === -1) {
+				entryIndex = entries.findIndex((entry) => {
+					const nameMatch = entry.match(/^name:\s*(.*)$/im);
+					const coverMatch = entry.match(/^cover:\s*(.*)$/im);
+					const ratingMatch = entry.match(/^rating:\s*(.*)$/im);
+					const dateMatch = entry.match(/^date:\s*(.*)$/im);
+					const platformMatch = entry.match(/^platform:\s*(.*)$/im);
+					const hoursMatch = entry.match(/^hours:\s*(.*)$/im);
+					const platinumMatch = entry.match(/^platinum:\s*(.*)$/im);
+
+					return (nameMatch?.[1] || '').trim() === (oldGame.name || '').trim() &&
+						(coverMatch?.[1] || '').trim() === (oldGame.cover || '').trim() &&
+						(ratingMatch?.[1] || '').trim() === String(oldGame.rating ?? 0) &&
+						(dateMatch?.[1] || '').trim() === (oldGame.completionDate || '').trim() &&
+						(platformMatch?.[1] || '').trim() === String(oldGame.platform || '').trim() &&
+						(hoursMatch?.[1] || '').trim() === String(oldGame.hours ?? 0) &&
+						(platinumMatch?.[1] || '').trim().toLowerCase() === String(oldGame.platinum).toLowerCase();
+				});
+			}
+
+			if (entryIndex === -1) {
+				new Notice('No se pudo encontrar la entrada a editar.');
+				return;
+			}
+
+			const targetEntry = entries[entryIndex];
+			const updatedBlock = originalBlock.replace(targetEntry, newEntry);
+			const newContent = content.replace(codeBlockRegex, `\`\`\`game-backlog\n${updatedBlock}\`\`\``);
+			
+			await this.app.vault.modify(file, newContent);
+			new Notice('Juego actualizado');
+		}
+	}
 }
 
 class AddGameModal extends Modal {
 	onSubmit: (game: GameEntry) => void;
+	isEditMode: boolean;
 	
+	id: string = '';
 	name: string = '';
 	cover: string = '';
-	brandImage: string = '';
 	rating: number = 3;
 	completionDate: string = '';
-	platform: string = '';
+	platform: GamePlatform = GamePlatform.SWITCH;
+	hours: number = 0;
 	platinum: boolean = false;
 
-	constructor(app: App, onSubmit: (game: GameEntry) => void) {
+	constructor(app: App, onSubmit: (game: GameEntry) => void, existingGame?: GameEntry) {
 		super(app);
 		this.onSubmit = onSubmit;
+		this.isEditMode = !!existingGame;
 		
-		// Fecha actual por defecto
-		const today = new Date();
-		this.completionDate = today.toISOString().split('T')[0];
+		if (existingGame) {
+			this.id = existingGame.id || '';
+			this.name = existingGame.name || '';
+			this.cover = existingGame.cover || '';
+			this.rating = existingGame.rating || 3;
+			this.completionDate = existingGame.completionDate || '';
+			this.platform = existingGame.platform || GamePlatform.SWITCH;
+			this.hours = existingGame.hours || 0;
+			this.platinum = existingGame.platinum || false;
+		} else {
+			// Fecha actual por defecto
+			const today = new Date();
+			this.completionDate = today.toISOString().split('T')[0];
+		}
 	}
 
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
 		
-		contentEl.createEl('h2', { text: 'Agregar Nuevo Juego' });
+		contentEl.createEl('h2', { text: this.isEditMode ? 'Editar Juego' : 'Agregar Nuevo Juego' });
 		
 		// Nombre
 		new Setting(contentEl)
@@ -342,16 +524,6 @@ class AddGameModal extends Modal {
 				.setValue(this.cover)
 				.onChange(value => {
 					this.cover = value;
-				}));
-
-		new Setting(contentEl)
-			.setName('Imagen de marca lateral')
-			.setDesc('Ruta local del vault o URL para la franja de la consola')
-			.addText(text => text
-				.setPlaceholder('Assets/brands/nintendo-3ds.png')
-				.setValue(this.brandImage)
-				.onChange(value => {
-					this.brandImage = value;
 				}));
 		
 		// Rating
@@ -378,20 +550,36 @@ class AddGameModal extends Modal {
 				})
 				.inputEl.type = 'date');
 		
-		// Plataforma
+		// Plataforma - Dropdown
 		new Setting(contentEl)
 			.setName('Plataforma')
 			.setDesc('Consola o plataforma donde lo jugaste')
+			.addDropdown(dropdown => {
+				Object.values(GamePlatform).forEach(platform => {
+					dropdown.addOption(platform, platform);
+				});
+				dropdown
+					.setValue(this.platform)
+					.onChange(value => {
+						this.platform = value as GamePlatform;
+					});
+			});
+
+		// Horas jugadas
+		new Setting(contentEl)
+			.setName('Horas jugadas')
+			.setDesc('Cantidad de horas (acepta decimales, ej: 2.5)')
 			.addText(text => text
-				.setPlaceholder('Ej: Nintendo Switch')
-				.setValue(this.platform)
+				.setPlaceholder('0')
+				.setValue(String(this.hours))
 				.onChange(value => {
-					this.platform = value;
-				}));
+					this.hours = parseFloat(value) || 0;
+				})
+				.inputEl.type = 'number');
 
 		new Setting(contentEl)
 			.setName('Platinado')
-			.setDesc('Etiqueta de platinado (todavía no se usa en el render)')
+			.setDesc('Logro de platino obtenido')
 			.addToggle(toggle => toggle
 				.setValue(this.platinum)
 				.onChange(value => {
@@ -401,16 +589,17 @@ class AddGameModal extends Modal {
 		// Botones
 		new Setting(contentEl)
 			.addButton(btn => btn
-				.setButtonText('Agregar')
+				.setButtonText(this.isEditMode ? 'Guardar' : 'Agregar')
 				.setCta()
 				.onClick(() => {
 					this.onSubmit({
+						id: this.id || generateGameId(),
 						name: this.name,
 						cover: this.cover,
-						brandImage: this.brandImage,
 						rating: this.rating,
 						completionDate: this.completionDate,
 						platform: this.platform,
+						hours: this.hours,
 						platinum: this.platinum
 					});
 					this.close();
@@ -455,88 +644,14 @@ class GameBacklogSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Imagen lateral por defecto')
-			.setDesc('Ruta local del vault o URL para la franja lateral')
-			.addText(text => text
-				.setPlaceholder('Assets/brands/default-brand.png')
-				.setValue(this.plugin.settings.defaultBrandImage)
+			.setName('Mostrar plataforma')
+			.setDesc('Mostrar el nombre de la plataforma en cada tarjeta')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.showPlatform)
 				.onChange(async (value) => {
-					this.plugin.settings.defaultBrandImage = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Color de fondo franja lateral')
-			.setDesc('Color de fondo detrás de la imagen transparente de marca')
-			.addText(text => {
-				text.setPlaceholder('#1f1f1f')
-					.setValue(this.plugin.settings.brandStripBackgroundColor)
-					.onChange(async (value) => {
-						this.plugin.settings.brandStripBackgroundColor = value || '#1f1f1f';
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.type = 'color';
-				return text;
-			});
-
-		new Setting(containerEl)
-			.setName('Escala del logo lateral')
-			.setDesc('Tamaño del logo dentro de la franja (0% a 100%)')
-			.addSlider(slider => slider
-				.setLimits(0, 100, 1)
-				.setValue(this.plugin.settings.brandLogoScale)
-				.setDynamicTooltip()
-				.onChange(async (value) => {
-					this.plugin.settings.brandLogoScale = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Padding izquierdo del logo')
-			.setDesc('Padding en px para la imagen de marca lateral')
-			.addSlider(slider => slider
-				.setLimits(0, 20, 1)
-				.setValue(this.plugin.settings.brandLogoPaddingLeft)
-				.setDynamicTooltip()
-				.onChange(async (value) => {
-					this.plugin.settings.brandLogoPaddingLeft = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Padding derecho del logo')
-			.setDesc('Padding en px para la imagen de marca lateral')
-			.addSlider(slider => slider
-				.setLimits(0, 20, 1)
-				.setValue(this.plugin.settings.brandLogoPaddingRight)
-				.setDynamicTooltip()
-				.onChange(async (value) => {
-					this.plugin.settings.brandLogoPaddingRight = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Padding superior del logo')
-			.setDesc('Padding en px para la imagen de marca lateral')
-			.addSlider(slider => slider
-				.setLimits(0, 20, 1)
-				.setValue(this.plugin.settings.brandLogoPaddingTop)
-				.setDynamicTooltip()
-				.onChange(async (value) => {
-					this.plugin.settings.brandLogoPaddingTop = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Padding inferior del logo')
-			.setDesc('Padding en px para la imagen de marca lateral')
-			.addSlider(slider => slider
-				.setLimits(0, 20, 1)
-				.setValue(this.plugin.settings.brandLogoPaddingBottom)
-				.setDynamicTooltip()
-				.onChange(async (value) => {
-					this.plugin.settings.brandLogoPaddingBottom = value;
+					this.plugin.settings.showPlatform = value;
 					await this.plugin.saveSettings();
 				}));
 	}
 }
+

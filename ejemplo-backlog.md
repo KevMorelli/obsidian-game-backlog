@@ -9,6 +9,8 @@ cover: https://assets.nintendo.com/image/upload/ar_16:9,b_auto:border,c_lpad/b_w
 rating: 5
 date: 2023-06-15
 platform: Nintendo Switch
+hours: 150.5
+platinum: true
 
 ---
 name: Elden Ring
@@ -16,18 +18,24 @@ cover: https://image.api.playstation.com/vulcan/ap/rnd/202110/2000/aGhopp3MHppi7
 rating: 5
 date: 2023-08-20
 platform: PlayStation 5
+hours: 120
+platinum: false
 
 ---
 name: Hollow Knight
 cover: https://upload.wikimedia.org/wikipedia/en/0/04/Hollow_Knight_first_cover_art.webp
 rating: 4
 date: 2023-09-10
-platform: PC
+platform: PC (Steam)
+hours: 45.5
 
 ---
 name: Hades
 cover: https://upload.wikimedia.org/wikipedia/en/c/cc/Hades_cover_art.jpg
 rating: 5
+date: 2023-10-12
+platform: Nintendo Switch
+hours: 80
 date: 2023-10-05
 platform: Nintendo Switch
 
