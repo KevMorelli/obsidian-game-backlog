@@ -30,11 +30,17 @@ function generateGameId(): string {
 interface GameBacklogSettings {
 	defaultCoverImage: string;
 	showPlatform: boolean;
+	topGame1: string;
+	topGame2: string;
+	topGame3: string;
 }
 
 const DEFAULT_SETTINGS: GameBacklogSettings = {
 	defaultCoverImage: 'https://via.placeholder.com/300x400?text=No+Cover',
-	showPlatform: true
+	showPlatform: true,
+	topGame1: '',
+	topGame2: '',
+	topGame3: ''
 }
 
 export default class GameBacklogPlugin extends Plugin {
@@ -282,8 +288,30 @@ export default class GameBacklogPlugin extends Plugin {
 		// Contenedor principal
 		const container = el.createDiv({ cls: 'game-backlog-container' });
 		
-		// Grilla de juegos
-		const grid = container.createDiv({ cls: 'game-backlog-grid' });
+		// Estado de vista (tarjetas o tabla)
+		let isTableView = false;
+		
+		// Contenedor de controles
+		const controlsContainer = container.createDiv({ cls: 'game-backlog-controls' });
+		
+		// Botón de toggle
+		const toggleButton = controlsContainer.createEl('button', { cls: 'game-view-toggle', text: '📊' });
+		toggleButton.title = 'Alternar entre vista de tarjetas y tabla';
+		
+		// Contenedor para vista de tarjetas
+		const cardsContainer = container.createDiv({ cls: 'game-backlog-cards-view' });
+		
+		// Contenedor para vista de tabla
+		const tableContainer = container.createDiv({ cls: 'game-backlog-table-view' });
+		tableContainer.style.display = 'none';
+		
+		// Sección de estadísticas
+		const statsContainer = container.createDiv({ cls: 'game-stats-container' });
+		
+		// Función para renderizar tarjetas
+		const renderCards = () => {
+			cardsContainer.empty();
+			const grid = cardsContainer.createDiv({ cls: 'game-backlog-grid' });
 		
 		games.forEach(game => {
 			const card = grid.createDiv({ cls: 'game-card' });
@@ -309,16 +337,6 @@ export default class GameBacklogPlugin extends Plugin {
 			const nameOverlay = coverContainer.createDiv({ cls: 'game-name-overlay' });
 			nameOverlay.textContent = game.name || 'Sin nombre';
 
-			// Botón de editar
-			const editButton = coverContainer.createDiv({ cls: 'game-edit-button' });
-			editButton.innerHTML = '✏';
-			editButton.addEventListener('click', (e) => {
-				e.stopPropagation();
-				new AddGameModal(this.app, (editedGame) => {
-					this.editGameInFile(ctx, game, editedGame);
-				}, game).open();
-			});
-
 			if (game.platinum) {
 				const platinumBadge = coverContainer.createEl('img', {
 					cls: 'game-platinum-badge',
@@ -334,24 +352,26 @@ export default class GameBacklogPlugin extends Plugin {
 			}
 
 			// Brand logo overlay en borde inferior derecho
-			const brandContainer = card.createDiv({ cls: 'game-brand-logo' });
-			
-			const brandImageSource = this.getPluginAssetUrl(this.getPlatformLogo(game.platform));
-			if (brandImageSource) {
-				const brandImage = brandContainer.createEl('img', {
-					cls: 'game-brand-image',
-					attr: {
-						src: brandImageSource,
-						alt: game.platform || 'Platform brand'
-					}
-				});
+			if (this.settings.showPlatform) {
+				const brandContainer = card.createDiv({ cls: 'game-brand-logo' });
+				
+				const brandImageSource = this.getPluginAssetUrl(this.getPlatformLogo(game.platform));
+				if (brandImageSource) {
+					const brandImage = brandContainer.createEl('img', {
+						cls: 'game-brand-image',
+						attr: {
+							src: brandImageSource,
+							alt: game.platform || 'Platform brand'
+						}
+					});
 
-				brandImage.onerror = () => {
-					brandImage.remove();
-				};
+					brandImage.onerror = () => {
+						brandImage.remove();
+					};
 
-				const platformLabel = brandContainer.createDiv({ cls: 'game-brand-platform-label' });
-				platformLabel.textContent = game.platform || '';
+					const platformLabel = brandContainer.createDiv({ cls: 'game-brand-platform-label' });
+					platformLabel.textContent = game.platform || '';
+				}
 			}
 			
 			// Información del juego
@@ -380,7 +400,157 @@ export default class GameBacklogPlugin extends Plugin {
 				const hours = details.createDiv({ cls: 'game-hours' });
 				hours.textContent = `⏱️ ${game.hours} hs`;
 			}
+
+			// Click handler para abrir modal de lectura
+			card.addEventListener('click', (e) => {
+				e.stopPropagation();
+				new GameViewModal(this.app, game, (editedGame) => {
+					this.editGameInFile(ctx, game, editedGame);
+				}).open();
+			});
 			
+		});
+		};
+		
+		// Función para renderizar tabla
+		const renderTable = () => {
+			tableContainer.empty();
+			const table = tableContainer.createEl('table', { cls: 'game-backlog-table' });
+			
+			// Header
+			const thead = table.createEl('thead');
+			const headerRow = thead.createEl('tr');
+			['Juego', 'Plataforma', 'Fecha', 'Puntaje', 'Duración'].forEach(header => {
+				headerRow.createEl('th', { text: header });
+			});
+			
+			// Body
+			const tbody = table.createEl('tbody');
+			games.forEach(game => {
+				const row = tbody.createEl('tr');
+				row.style.cursor = 'pointer';
+				
+				// Juego
+				const nameCell = row.createEl('td');
+				nameCell.textContent = game.name || 'Sin nombre';
+				
+				// Plataforma
+				const platformCell = row.createEl('td');
+				platformCell.textContent = game.platform || '—';
+				
+				// Fecha
+				const dateCell = row.createEl('td');
+				if (game.completionDate) {
+					const parsed = new Date(game.completionDate);
+					if (!Number.isNaN(parsed.getTime())) {
+						const day = String(parsed.getDate()).padStart(2, '0');
+						const month = String(parsed.getMonth() + 1).padStart(2, '0');
+						dateCell.textContent = `${day}/${month}`;
+					} else {
+						dateCell.textContent = game.completionDate;
+					}
+				} else {
+					dateCell.textContent = '—';
+				}
+				
+				// Puntaje
+				const scoreCell = row.createEl('td');
+				if (game.rating) {
+					scoreCell.textContent = `${game.rating} ⭐`;
+				} else {
+					scoreCell.textContent = '—';
+				}
+				
+				// Duración
+				const hoursCell = row.createEl('td');
+				if (game.hours && game.hours > 0) {
+					hoursCell.textContent = `${game.hours} hs`;
+				} else {
+					hoursCell.textContent = '—';
+				}
+				
+				// Click handler para abrir modal
+				row.addEventListener('click', () => {
+					new GameViewModal(this.app, game, (editedGame) => {
+						this.editGameInFile(ctx, game, editedGame);
+					}).open();
+				});
+			});
+		};
+		
+		// Función para actualizar estadísticas
+		const renderStats = () => {
+			const totalGames = games.length;
+			const totalHours = games.reduce((sum, game) => sum + (game.hours || 0), 0);
+			
+			// Labels de estadísticas
+			const statsLabels = statsContainer.createDiv({ cls: 'game-stats-labels' });
+			
+			const gamesLabel = statsLabels.createDiv({ cls: 'game-stat-item' });
+			gamesLabel.textContent = `Juegos completados: ${totalGames}`;
+			
+			const hoursLabel = statsLabels.createDiv({ cls: 'game-stat-item' });
+			hoursLabel.textContent = `Horas totales: ${Math.round(totalHours)}~ hs`;
+			
+			// Top 3 games
+			const topGamesContainer = statsContainer.createDiv({ cls: 'game-top-games' });
+			const medals = ['🥇', '🥈', '🥉'];
+			const topGameSettings: Array<'topGame1' | 'topGame2' | 'topGame3'> = ['topGame1', 'topGame2', 'topGame3'];
+			const gameNames = games.map(g => g.name);
+			
+			topGameSettings.forEach((settingKey, index) => {
+				const topGameRow = topGamesContainer.createDiv({ cls: 'game-top-game-row' });
+				
+				const medal = topGameRow.createSpan({ cls: 'game-medal' });
+				medal.textContent = medals[index];
+				
+				const select = topGameRow.createEl('select', { cls: 'game-top-game-select' });
+				
+				// Option vacía
+				const emptyOption = select.createEl('option');
+				emptyOption.value = '';
+				emptyOption.textContent = `Seleccionar ${['mejor', 'segundo mejor', 'tercer'][index]} juego...`;
+				
+				// Options con los juegos
+				gameNames.forEach(name => {
+					const option = select.createEl('option');
+					option.value = name;
+					option.textContent = name;
+				});
+				
+				// Establecer valor actual
+				const currentValue = this.settings[settingKey];
+				select.value = currentValue || '';
+				
+				// Listener para guardar cambios
+			select.addEventListener('change', async (e: Event) => {
+					const newValue = (e.target as HTMLSelectElement).value;
+					this.settings[settingKey] = newValue;
+					await this.saveSettings();
+				});
+			});
+		};
+		
+		// Renderizar inicial con tarjetas
+		renderCards();
+		
+		// Sección de estadísticas
+		statsContainer.empty();
+		renderStats();
+		
+		// Event listener para toggle de vista
+		toggleButton.addEventListener('click', () => {
+			isTableView = !isTableView;
+			if (isTableView) {
+				cardsContainer.style.display = 'none';
+				tableContainer.style.display = 'block';
+				toggleButton.textContent = '🃏';
+				renderTable();
+			} else {
+				cardsContainer.style.display = 'block';
+				tableContainer.style.display = 'none';
+				toggleButton.textContent = '📊';
+			}
 		});
 		
 		// Botón para agregar nuevo juego
@@ -623,6 +793,100 @@ class AddGameModal extends Modal {
 				.onClick(() => {
 					this.close();
 				}));
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+	}
+}
+
+class GameViewModal extends Modal {
+	game: GameEntry;
+	onEdit: (editedGame: GameEntry) => void;
+
+	constructor(app: App, game: GameEntry, onEdit: (editedGame: GameEntry) => void) {
+		super(app);
+		this.game = game;
+		this.onEdit = onEdit;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+
+		contentEl.createEl('h2', { text: this.game.name || 'Sin nombre' });
+
+		// Contenedor de información
+		const infoContainer = contentEl.createDiv({ cls: 'game-view-info' });
+
+		// Rating
+		const ratingContainer = infoContainer.createDiv({ cls: 'game-view-item' });
+		const ratingLabel = ratingContainer.createSpan({ cls: 'game-view-label' });
+		ratingLabel.textContent = 'Puntuación: ';
+		const ratingValue = ratingContainer.createSpan({ cls: 'game-view-value' });
+		for (let i = 1; i <= 5; i++) {
+			ratingValue.createSpan({
+				cls: i <= (this.game.rating || 0) ? 'star filled' : 'star empty',
+				text: '★'
+			});
+		}
+
+		// Plataforma
+		if (this.game.platform) {
+			const platformContainer = infoContainer.createDiv({ cls: 'game-view-item' });
+			const platformLabel = platformContainer.createSpan({ cls: 'game-view-label' });
+			platformLabel.textContent = 'Plataforma: ';
+			const platformValue = platformContainer.createSpan({ cls: 'game-view-value' });
+			platformValue.textContent = this.game.platform;
+		}
+
+		// Fecha de completación
+		if (this.game.completionDate) {
+			const dateContainer = infoContainer.createDiv({ cls: 'game-view-item' });
+			const dateLabel = dateContainer.createSpan({ cls: 'game-view-label' });
+			dateLabel.textContent = 'Completado: ';
+			const dateValue = dateContainer.createSpan({ cls: 'game-view-value' });
+			const parsed = new Date(this.game.completionDate);
+			if (!Number.isNaN(parsed.getTime())) {
+				const locale = navigator.language || 'es-ES';
+				dateValue.textContent = new Intl.DateTimeFormat(locale, {
+					day: 'numeric',
+					month: 'long',
+					year: 'numeric'
+				}).format(parsed);
+			} else {
+				dateValue.textContent = this.game.completionDate;
+			}
+		}
+
+		// Horas
+		if (this.game.hours && this.game.hours > 0) {
+			const hoursContainer = infoContainer.createDiv({ cls: 'game-view-item' });
+			const hoursLabel = hoursContainer.createSpan({ cls: 'game-view-label' });
+			hoursLabel.textContent = 'Horas jugadas: ';
+			const hoursValue = hoursContainer.createSpan({ cls: 'game-view-value' });
+			hoursValue.textContent = `${this.game.hours} hs`;
+		}
+
+		// Platinado
+		if (this.game.platinum) {
+			const platinumContainer = infoContainer.createDiv({ cls: 'game-view-item' });
+			const platinumLabel = platinumContainer.createSpan({ cls: 'game-view-label' });
+			platinumLabel.textContent = 'Estado: ';
+			const platinumValue = platinumContainer.createSpan({ cls: 'game-view-value' });
+			platinumValue.textContent = '🏆 Platinado';
+		}
+
+		// Botón Editar
+		const buttonContainer = contentEl.createDiv({ cls: 'game-view-buttons' });
+		const editButton = buttonContainer.createEl('button', { text: 'Editar' });
+		editButton.addEventListener('click', () => {
+			this.close();
+			new AddGameModal(this.app, (editedGame) => {
+				this.onEdit(editedGame);
+			}, this.game).open();
+		});
 	}
 
 	onClose() {

@@ -22,7 +22,7 @@
 	border: 1px solid var(--background-modifier-border);
 	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 	transition: transform 0.2s ease, box-shadow 0.2s ease;
-	cursor: default;
+	cursor: pointer;
 	position: relative;
 }
 
@@ -213,6 +213,123 @@
 	gap: 5px;
 }
 
+/* Sección de estadísticas */
+.game-stats-container {
+	display: flex;
+	flex-direction: column;
+	gap: 15px;
+	margin-top: 30px;
+	padding: 15px;
+	background: var(--background-secondary);
+	border-radius: 8px;
+	border: 1px solid var(--background-modifier-border);
+	max-width: 450px;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.game-stats-labels {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.game-stat-item {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--text-normal);
+}
+
+.game-top-games {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.game-top-game-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.game-medal {
+	font-size: 18px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 24px;
+}
+
+.game-top-game-select {
+	flex: 1;
+	padding: 6px 8px;
+	font-size: 13px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	cursor: pointer;
+	transition: border-color 0.2s ease;
+}
+
+.game-top-game-select:hover {
+	border-color: var(--interactive-accent);
+}
+
+.game-top-game-select:focus {
+	outline: none;
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Modal de lectura de juego */
+.game-view-info {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 15px 0;
+}
+
+.game-view-item {
+	display: flex;
+	gap: 8px;
+	font-size: 14px;
+}
+
+.game-view-label {
+	font-weight: 600;
+	color: var(--text-muted);
+	min-width: 120px;
+}
+
+.game-view-value {
+	color: var(--text-normal);
+	flex: 1;
+}
+
+.game-view-buttons {
+	display: flex;
+	gap: 10px;
+	justify-content: flex-end;
+	margin-top: 20px;
+}
+
+.game-view-buttons button {
+	padding: 8px 16px;
+	border: none;
+	border-radius: 6px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.game-view-buttons button:hover {
+	background: var(--interactive-accent-hover);
+	transform: translateY(-1px);
+}
+
 /* Botón para agregar juego */
 .game-add-button {
 	display: flex;
@@ -287,6 +404,84 @@
 .theme-light .game-card {
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
+}
+
+/* Controles de vista */
+.game-backlog-controls {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: 15px;
+}
+
+.game-view-toggle {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border: none;
+	border-radius: 6px;
+	padding: 8px 12px;
+	font-size: 16px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.game-view-toggle:hover {
+	background: var(--interactive-accent-hover);
+	transform: scale(1.05);
+}
+
+/* Vista de tarjetas */
+.game-backlog-cards-view {
+	display: block;
+}
+
+/* Vista de tabla */
+.game-backlog-table-view {
+	display: none;
+	overflow-x: auto;
+}
+
+.game-backlog-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-bottom: 30px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.game-backlog-table thead {
+	background: var(--background-tertiary);
+	border-bottom: 2px solid var(--background-modifier-border);
+}
+
+.game-backlog-table th {
+	padding: 12px 15px;
+	text-align: left;
+	font-weight: 600;
+	color: var(--text-normal);
+	font-size: 13px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.game-backlog-table tbody tr {
+	border-bottom: 1px solid var(--background-modifier-border);
+	transition: background 0.2s ease;
+}
+
+.game-backlog-table tbody tr:hover {
+	background: var(--background-tertiary);
+}
+
+.game-backlog-table td {
+	padding: 12px 15px;
+	font-size: 13px;
+	color: var(--text-normal);
+}
+
+.game-backlog-table tbody tr:last-child {
+	border-bottom: none;
 }
 
 
