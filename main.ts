@@ -27,20 +27,25 @@ function generateGameId(): string {
 	return `game-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-interface GameBacklogSettings {
-	defaultCoverImage: string;
-	showPlatform: boolean;
+interface BlockConfig {
+	isLocked: boolean;
 	topGame1: string;
 	topGame2: string;
 	topGame3: string;
 }
 
+type PlatformMode = 'none' | 'image' | 'label';
+
+interface GameBacklogSettings {
+	defaultCoverImage: string;
+	platformMode: PlatformMode;
+	imageDownloadFolder: string;
+}
+
 const DEFAULT_SETTINGS: GameBacklogSettings = {
 	defaultCoverImage: 'https://via.placeholder.com/300x400?text=No+Cover',
-	showPlatform: true,
-	topGame1: '',
-	topGame2: '',
-	topGame3: ''
+	platformMode: 'image',
+	imageDownloadFolder: ''
 }
 
 export default class GameBacklogPlugin extends Plugin {
@@ -89,7 +94,17 @@ export default class GameBacklogPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const rawData = (await this.loadData()) as Partial<GameBacklogSettings> & { showPlatform?: boolean };
+		const { showPlatform, ...rest } = rawData;
+
+		const migratedPlatformMode: PlatformMode = rawData.platformMode
+			?? (typeof showPlatform === 'boolean' ? (showPlatform ? 'image' : 'none') : DEFAULT_SETTINGS.platformMode);
+
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, rest, { platformMode: migratedPlatformMode });
+
+		if (!rawData.platformMode && typeof showPlatform === 'boolean') {
+			await this.saveSettings();
+		}
 	}
 
 	async saveSettings() {
@@ -225,6 +240,67 @@ export default class GameBacklogPlugin extends Plugin {
 		return logoMap[platform] || '';
 	}
 
+	getPlatformLabelIcon(platform: GamePlatform): string {
+		const iconMap: { [key in GamePlatform]: string } = {
+			[GamePlatform.SWITCH]: '🎮',
+			[GamePlatform.PC]: '🖥️',
+			[GamePlatform.STEAM_DECK]: '🕹️',
+			[GamePlatform.PS_VITA]: '🎮',
+			[GamePlatform.PS2]: '🎮',
+			[GamePlatform.PS1]: '🎮',
+			[GamePlatform.NINTENDO_3DS]: '🎮',
+			[GamePlatform.NINTENDO_DS]: '🎮',
+			[GamePlatform.GBA]: '🎮'
+		};
+
+		return iconMap[platform] || '🎮';
+	}
+
+	async downloadRemoteImage(url: string, destFolder: string | null, sourceFile: TFile): Promise<string> {
+		try {
+			if (!url || !/^https?:\/\//.test(url)) {
+				return url;
+			}
+
+			// Determinar carpeta destino: si no está configurada, usar la misma del archivo
+			const targetFolder = destFolder || sourceFile.parent?.path || '';
+
+			// Crear directorio si no existe
+			const targetPath = this.app.vault.adapter as unknown as { mkdir?: (path: string) => Promise<void> };
+			if (typeof targetPath.mkdir === 'function' && targetFolder) {
+				await targetPath.mkdir(targetFolder);
+			}
+
+			// Obtener nombre del archivo de la URL
+			const urlParts = new URL(url);
+			const fileName = urlParts.pathname.split('/').pop() || `image-${Date.now()}.png`;
+
+			// Construir ruta de destino completa
+			const filePath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
+
+			// Descargar imagen
+			const response = await fetch(url);
+			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+			const arrayBuffer = await response.arrayBuffer();
+
+			// Guardar archivo, sobrescribiendo si existe
+			const existingFile = this.app.vault.getAbstractFileByPath(filePath);
+			if (existingFile instanceof TFile) {
+				await this.app.vault.modifyBinary(existingFile, arrayBuffer);
+			} else {
+				await this.app.vault.createBinary(filePath, arrayBuffer);
+			}
+
+			// Retornar referencia obsidian
+			return filePath;
+		} catch (error) {
+			console.error('[game-backlog] Download error:', error);
+			new Notice(`Error descargando imagen: ${error}`);
+			return url;
+		}
+	}
+
 	getPluginAssetUrl(fileName: string): string {
 		if (!fileName) return '';
 
@@ -282,8 +358,48 @@ export default class GameBacklogPlugin extends Plugin {
 		}).format(parsed);
 	}
 
+	parseBlockConfig(source: string): BlockConfig {
+		const config: BlockConfig = { isLocked: false, topGame1: '', topGame2: '', topGame3: '' };
+		const lines = source.split('\n');
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (trimmed.startsWith('---')) break;
+			const colonIdx = trimmed.indexOf(':');
+			if (colonIdx === -1) continue;
+			const key = trimmed.slice(0, colonIdx).trim().toLowerCase();
+			const value = trimmed.slice(colonIdx + 1).trim();
+			switch (key) {
+				case 'islocked': config.isLocked = value === 'true'; break;
+				case 'topgame1': config.topGame1 = value; break;
+				case 'topgame2': config.topGame2 = value; break;
+				case 'topgame3': config.topGame3 = value; break;
+			}
+		}
+		return config;
+	}
+
+	async saveBlockConfig(ctx: MarkdownPostProcessorContext, config: BlockConfig): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(ctx.sourcePath);
+		if (!(file instanceof TFile)) return;
+
+		const content = await this.app.vault.read(file);
+		const codeBlockRegex = /```game-backlog\n([\s\S]*?)```/;
+		const match = content.match(codeBlockRegex);
+		if (!match) return;
+
+		const originalBlock = match[1];
+		const firstDashIdx = originalBlock.indexOf('---');
+		const entriesPart = firstDashIdx !== -1 ? originalBlock.slice(firstDashIdx) : originalBlock;
+
+		const configSection = `isLocked: ${config.isLocked}\ntopGame1: ${config.topGame1}\ntopGame2: ${config.topGame2}\ntopGame3: ${config.topGame3}\n`;
+		const newBlock = configSection + entriesPart;
+		const newContent = content.replace(codeBlockRegex, '\`\`\`game-backlog\n' + newBlock + '\`\`\`');
+		await this.app.vault.modify(file, newContent);
+	}
+
 	renderGameBacklog(source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) {
 		const games = this.parseGameEntries(source);
+		const blockConfig = this.parseBlockConfig(source);
 		
 		// Contenedor principal
 		const container = el.createDiv({ cls: 'game-backlog-container' });
@@ -294,9 +410,27 @@ export default class GameBacklogPlugin extends Plugin {
 		// Contenedor de controles
 		const controlsContainer = container.createDiv({ cls: 'game-backlog-controls' });
 		
-		// Botón de toggle
+		// Botón de toggle vista
 		const toggleButton = controlsContainer.createEl('button', { cls: 'game-view-toggle', text: '📊' });
 		toggleButton.title = 'Alternar entre vista de tarjetas y tabla';
+
+		// Botón de candado
+		const lockButton = controlsContainer.createEl('button', { cls: 'game-lock-toggle' });
+		lockButton.textContent = blockConfig.isLocked ? '🔒' : '🔓';
+		lockButton.title = blockConfig.isLocked ? 'Desbloquear edición' : 'Bloquear edición';
+		lockButton.addEventListener('click', async () => {
+			blockConfig.isLocked = !blockConfig.isLocked;
+			await this.saveBlockConfig(ctx, blockConfig);
+			lockButton.textContent = blockConfig.isLocked ? '🔒' : '🔓';
+			lockButton.title = blockConfig.isLocked ? 'Desbloquear edición' : 'Bloquear edición';
+			if (isTableView) {
+				renderTable();
+			} else {
+				renderCards();
+			}
+			statsContainer.empty();
+			renderStats();
+		});
 		
 		// Contenedor para vista de tarjetas
 		const cardsContainer = container.createDiv({ cls: 'game-backlog-cards-view' });
@@ -351,10 +485,9 @@ export default class GameBacklogPlugin extends Plugin {
 				};
 			}
 
-			// Brand logo overlay en borde inferior derecho
-			if (this.settings.showPlatform) {
+			// Visualización de plataforma por modo global
+			if (this.settings.platformMode === 'image') {
 				const brandContainer = card.createDiv({ cls: 'game-brand-logo' });
-				
 				const brandImageSource = this.getPluginAssetUrl(this.getPlatformLogo(game.platform));
 				if (brandImageSource) {
 					const brandImage = brandContainer.createEl('img', {
@@ -394,6 +527,11 @@ export default class GameBacklogPlugin extends Plugin {
 				date.textContent = `📅 ${this.formatCompletionDate(game.completionDate)}`;
 			}
 
+			if (this.settings.platformMode === 'label' && game.platform) {
+				const platform = details.createDiv({ cls: 'game-platform' });
+				platform.textContent = `${this.getPlatformLabelIcon(game.platform)} ${game.platform}`;
+			}
+
 
 
 			if (game.hours && game.hours > 0) {
@@ -401,15 +539,27 @@ export default class GameBacklogPlugin extends Plugin {
 				hours.textContent = `⏱️ ${game.hours} hs`;
 			}
 
-			// Click handler para abrir modal de lectura
+			// Click handler para abrir modal de lectura (siempre disponible)
 			card.addEventListener('click', (e) => {
 				e.stopPropagation();
 				new GameViewModal(this.app, game, (editedGame) => {
 					this.editGameInFile(ctx, game, editedGame);
-				}).open();
+				}, !blockConfig.isLocked, this).open();
 			});
+			card.style.cursor = 'pointer';
 			
 		});
+
+			// Tarjeta de agregar (solo si desbloqueado)
+			if (!blockConfig.isLocked) {
+				const addCard = grid.createDiv({ cls: 'game-card game-card-add' });
+				addCard.createSpan({ cls: 'game-card-add-icon', text: '+' });
+				addCard.addEventListener('click', () => {
+					new AddGameModal(this.app, (newGame) => {
+						this.addGameToFile(ctx, newGame);
+					}, this).open();
+				});
+			}
 		};
 		
 		// Función para renderizar tabla
@@ -469,13 +619,26 @@ export default class GameBacklogPlugin extends Plugin {
 					hoursCell.textContent = '—';
 				}
 				
-				// Click handler para abrir modal
+				// Click handler para abrir modal (siempre disponible)
 				row.addEventListener('click', () => {
 					new GameViewModal(this.app, game, (editedGame) => {
 						this.editGameInFile(ctx, game, editedGame);
-					}).open();
+					}, !blockConfig.isLocked, this).open();
 				});
+				row.style.cursor = 'pointer';
 			});
+			
+			// Fila de agregar (solo si desbloqueado)
+			if (!blockConfig.isLocked) {
+				const addRow = tbody.createEl('tr', { cls: 'game-table-add-row' });
+				const addCell = addRow.createEl('td', { attr: { colspan: '5' } });
+				addCell.textContent = '+';
+				addRow.addEventListener('click', () => {
+					new AddGameModal(this.app, (newGame) => {
+						this.addGameToFile(ctx, newGame);
+					}, this).open();
+				});
+			}
 		};
 		
 		// Función para actualizar estadísticas
@@ -504,30 +667,34 @@ export default class GameBacklogPlugin extends Plugin {
 				const medal = topGameRow.createSpan({ cls: 'game-medal' });
 				medal.textContent = medals[index];
 				
-				const select = topGameRow.createEl('select', { cls: 'game-top-game-select' });
-				
-				// Option vacía
-				const emptyOption = select.createEl('option');
-				emptyOption.value = '';
-				emptyOption.textContent = `Seleccionar ${['mejor', 'segundo mejor', 'tercer'][index]} juego...`;
-				
-				// Options con los juegos
-				gameNames.forEach(name => {
-					const option = select.createEl('option');
-					option.value = name;
-					option.textContent = name;
-				});
-				
-				// Establecer valor actual
-				const currentValue = this.settings[settingKey];
-				select.value = currentValue || '';
-				
-				// Listener para guardar cambios
-			select.addEventListener('change', async (e: Event) => {
-					const newValue = (e.target as HTMLSelectElement).value;
-					this.settings[settingKey] = newValue;
-					await this.saveSettings();
-				});
+				const currentValue = blockConfig[settingKey];
+
+				if (blockConfig.isLocked) {
+					// Modo bloqueado: mostrar texto plano
+					const label = topGameRow.createSpan({ cls: 'game-top-game-label' });
+					label.textContent = currentValue || `—`;
+				} else {
+					// Modo edición: mostrar dropdown
+					const select = topGameRow.createEl('select', { cls: 'game-top-game-select' });
+					
+					const emptyOption = select.createEl('option');
+					emptyOption.value = '';
+					emptyOption.textContent = `Seleccionar ${['mejor', 'segundo mejor', 'tercer'][index]} juego...`;
+					
+					gameNames.forEach(name => {
+						const option = select.createEl('option');
+						option.value = name;
+						option.textContent = name;
+					});
+					
+					select.value = currentValue || '';
+					
+					select.addEventListener('change', async (e: Event) => {
+						const newValue = (e.target as HTMLSelectElement).value;
+						blockConfig[settingKey] = newValue;
+						await this.saveBlockConfig(ctx, blockConfig);
+					});
+				}
 			});
 		};
 		
@@ -553,15 +720,6 @@ export default class GameBacklogPlugin extends Plugin {
 			}
 		});
 		
-		// Botón para agregar nuevo juego
-		const addButton = container.createDiv({ cls: 'game-add-button' });
-		const button = addButton.createEl('button', { text: '+ Agregar Juego' });
-		
-		button.addEventListener('click', () => {
-			new AddGameModal(this.app, (newGame) => {
-				this.addGameToFile(ctx, newGame);
-			}).open();
-		});
 	}
 
 	async addGameToFile(ctx: MarkdownPostProcessorContext, game: GameEntry) {
@@ -651,6 +809,7 @@ export default class GameBacklogPlugin extends Plugin {
 class AddGameModal extends Modal {
 	onSubmit: (game: GameEntry) => void;
 	isEditMode: boolean;
+	plugin: GameBacklogPlugin;
 	
 	id: string = '';
 	name: string = '';
@@ -661,9 +820,10 @@ class AddGameModal extends Modal {
 	hours: number = 0;
 	platinum: boolean = false;
 
-	constructor(app: App, onSubmit: (game: GameEntry) => void, existingGame?: GameEntry) {
+	constructor(app: App, onSubmit: (game: GameEntry) => void, plugin: GameBacklogPlugin, existingGame?: GameEntry) {
 		super(app);
 		this.onSubmit = onSubmit;
+		this.plugin = plugin;
 		this.isEditMode = !!existingGame;
 		
 		if (existingGame) {
@@ -700,15 +860,48 @@ class AddGameModal extends Modal {
 				}));
 		
 		// Portada (URL)
-		new Setting(contentEl)
+		let coverTextField: HTMLInputElement;
+		const coverSetting = new Setting(contentEl);
+		coverSetting
 			.setName('URL de la portada')
 			.setDesc('Link a la imagen de la portada')
-			.addText(text => text
-				.setPlaceholder('https://ejemplo.com/portada.jpg')
-				.setValue(this.cover)
-				.onChange(value => {
-					this.cover = value;
+			.addText(text => {
+				coverTextField = text.inputEl;
+				text.setPlaceholder('https://ejemplo.com/portada.jpg')
+					.setValue(this.cover)
+					.onChange(value => {
+						this.cover = value;
+					});
+			});
+
+		// Botón de descarga de imagen remota
+		if (this.cover && /^https?:\/\//.test(this.cover)) {
+			coverSetting.addButton(btn => btn
+				.setButtonText('⬇️')
+				.setTooltip('Descargar imagen remota a carpeta configurada')
+				.onClick(async () => {
+					const activeFile = this.app.workspace.getActiveFile();
+					if (!activeFile) {
+						new Notice('No hay archivo abierto');
+						return;
+					}
+
+					const downloadPath = await this.plugin.downloadRemoteImage(
+						this.cover,
+						this.plugin.settings.imageDownloadFolder || null,
+						activeFile
+					);
+
+					if (downloadPath !== this.cover) {
+						this.cover = downloadPath;
+						if (coverTextField) {
+							coverTextField.value = downloadPath;
+							coverTextField.dispatchEvent(new Event('input', { bubbles: true }));
+						}
+						new Notice('Imagen descargada exitosamente');
+					}
 				}));
+		}
 		
 		// Rating
 		new Setting(contentEl)
@@ -804,11 +997,15 @@ class AddGameModal extends Modal {
 class GameViewModal extends Modal {
 	game: GameEntry;
 	onEdit: (editedGame: GameEntry) => void;
+	canEdit: boolean;
+	plugin: GameBacklogPlugin;
 
-	constructor(app: App, game: GameEntry, onEdit: (editedGame: GameEntry) => void) {
+	constructor(app: App, game: GameEntry, onEdit: (editedGame: GameEntry) => void, canEdit: boolean = true, plugin?: GameBacklogPlugin) {
 		super(app);
 		this.game = game;
 		this.onEdit = onEdit;
+		this.canEdit = canEdit;
+		this.plugin = plugin!;
 	}
 
 	onOpen() {
@@ -878,15 +1075,17 @@ class GameViewModal extends Modal {
 			platinumValue.textContent = '🏆 Platinado';
 		}
 
-		// Botón Editar
-		const buttonContainer = contentEl.createDiv({ cls: 'game-view-buttons' });
-		const editButton = buttonContainer.createEl('button', { text: 'Editar' });
-		editButton.addEventListener('click', () => {
-			this.close();
-			new AddGameModal(this.app, (editedGame) => {
-				this.onEdit(editedGame);
-			}, this.game).open();
-		});
+		// Botón Editar (solo si está habilitada la edición)
+		if (this.canEdit) {
+			const buttonContainer = contentEl.createDiv({ cls: 'game-view-buttons' });
+			const editButton = buttonContainer.createEl('button', { text: 'Editar' });
+			editButton.addEventListener('click', () => {
+				this.close();
+				new AddGameModal(this.app, (editedGame) => {
+					this.onEdit(editedGame);
+				}, this.plugin, this.game).open();
+			});
+		}
 	}
 
 	onClose() {
@@ -922,12 +1121,26 @@ class GameBacklogSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Mostrar plataforma')
-			.setDesc('Mostrar el nombre de la plataforma en cada tarjeta')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.showPlatform)
+			.setName('Platform mode')
+			.setDesc('None: no muestra plataforma, Image: logo en esquina inferior derecha, Label: etiqueta con icono y nombre')
+			.addDropdown(dropdown => dropdown
+				.addOption('none', 'None')
+				.addOption('image', 'Image')
+				.addOption('label', 'Label')
+				.setValue(this.plugin.settings.platformMode)
 				.onChange(async (value) => {
-					this.plugin.settings.showPlatform = value;
+					this.plugin.settings.platformMode = value as PlatformMode;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Carpeta de descarga de imágenes')
+			.setDesc('Carpeta en el vault donde se descargarán las imágenes remotas. Si está vacía, se usará la carpeta del archivo')
+			.addText(text => text
+				.setPlaceholder('attachments')
+				.setValue(this.plugin.settings.imageDownloadFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.imageDownloadFolder = value;
 					await this.plugin.saveSettings();
 				}));
 	}
