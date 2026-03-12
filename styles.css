@@ -149,6 +149,16 @@
 	transition: opacity 0.2s ease;
 }
 
+.game-cover-container.game-cover-no-image {
+	background: linear-gradient(135deg, var(--background-modifier-border), var(--background-secondary));
+}
+
+.game-cover-container.game-cover-no-image .game-name-overlay,
+.game-name-overlay.game-name-overlay-static {
+	opacity: 1;
+	background: rgba(0, 0, 0, 0.42);
+}
+
 .game-edit-button {
 	position: absolute;
 	top: 8px;

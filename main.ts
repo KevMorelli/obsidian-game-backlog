@@ -1,4 +1,5 @@
 import { App, Plugin, PluginSettingTab, Setting, MarkdownPostProcessorContext, Modal, Notice, TFile, requestUrl } from 'obsidian';
+import { AppLanguage, I18nKey, translate } from './i18n';
 
 enum GamePlatform {
 	SWITCH = 'Switch',
@@ -37,12 +38,14 @@ interface BlockConfig {
 type PlatformMode = 'none' | 'image' | 'label';
 
 interface GameBacklogSettings {
+	language: AppLanguage;
 	defaultCoverImage: string;
 	platformMode: PlatformMode;
 	imageDownloadFolder: string;
 }
 
 const DEFAULT_SETTINGS: GameBacklogSettings = {
+	language: 'es',
 	defaultCoverImage: 'https://via.placeholder.com/300x400?text=No+Cover',
 	platformMode: 'image',
 	imageDownloadFolder: ''
@@ -51,12 +54,20 @@ const DEFAULT_SETTINGS: GameBacklogSettings = {
 export default class GameBacklogPlugin extends Plugin {
 	settings: GameBacklogSettings;
 
+	t(key: I18nKey, vars?: Record<string, string | number>): string {
+		return translate(this.settings.language, key, vars);
+	}
+
+	getDateLocale(): string {
+		return this.settings.language === 'en' ? 'en-US' : 'es-ES';
+	}
+
 	async onload() {
 		await this.loadSettings();
 
 		this.addCommand({
 			id: 'insert-game-backlog-block',
-			name: 'Insertar bloque game-backlog',
+			name: this.t('commandInsertBlock'),
 			editorCallback: (editor) => {
 				const defaultBlock = [
 					'```game-backlog',
@@ -82,7 +93,7 @@ export default class GameBacklogPlugin extends Plugin {
 				this.renderGameBacklog(source, el, ctx);
 			} catch (error) {
 				console.error('[game-backlog] Render error:', error);
-				el.createDiv({ text: 'Error renderizando game-backlog. Revisa la consola de desarrollador.' });
+				el.createDiv({ text: this.t('renderError') });
 			}
 		});
 
@@ -340,7 +351,7 @@ export default class GameBacklogPlugin extends Plugin {
 			}
 
 			if (!arrayBuffer) {
-				throw new Error('No se pudo descargar la imagen. El servidor puede tener restricciones CORS o estar caído.');
+				throw new Error(this.t('downloadErrorUnavailable'));
 			}
 
 			// Guardar archivo, sobrescribiendo si existe
@@ -356,7 +367,7 @@ export default class GameBacklogPlugin extends Plugin {
 		} catch (error) {
 			console.error('[game-backlog] Download error:', error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
-			new Notice(`Error descargando imagen: ${errorMsg}`);
+			new Notice(this.t('downloadErrorPrefix', { error: errorMsg }));
 			return url;
 		}
 	}
@@ -374,7 +385,7 @@ export default class GameBacklogPlugin extends Plugin {
 		return assetPath;
 	}
 
-	resolveImageSource(rawPath: string): string {
+	resolveImageSource(rawPath: string, sourcePath: string = ''): string {
 		if (!rawPath) return '';
 
 		// Si es una URL o data URI, retornar directamente
@@ -388,13 +399,11 @@ export default class GameBacklogPlugin extends Plugin {
 			if (file instanceof TFile) {
 				return this.app.vault.getResourcePath(file);
 			}
-			// Si no encuentra el archivo, retornar la ruta como está
-			// (puede que no exista durante desarrollo)
-			return rawPath;
+			return '';
 		}
 
 		// Intentar resolver como enlace o ruta de archivo del vault
-		const linked = this.app.metadataCache.getFirstLinkpathDest(rawPath, '');
+		const linked = this.app.metadataCache.getFirstLinkpathDest(rawPath, sourcePath);
 		if (linked instanceof TFile) {
 			return this.app.vault.getResourcePath(linked);
 		}
@@ -404,14 +413,14 @@ export default class GameBacklogPlugin extends Plugin {
 			return this.app.vault.getResourcePath(byPath);
 		}
 
-		return rawPath;
+		return '';
 	}
 
 	formatCompletionDate(rawDate: string): string {
 		const parsed = new Date(rawDate);
 		if (Number.isNaN(parsed.getTime())) return rawDate;
 
-		const locale = navigator.language || 'es-ES';
+		const locale = this.getDateLocale();
 		return new Intl.DateTimeFormat(locale, {
 			day: 'numeric',
 			month: 'long'
@@ -472,17 +481,17 @@ export default class GameBacklogPlugin extends Plugin {
 		
 		// Botón de toggle vista
 		const toggleButton = controlsContainer.createEl('button', { cls: 'game-view-toggle', text: '📊' });
-		toggleButton.title = 'Alternar entre vista de tarjetas y tabla';
+		toggleButton.title = this.t('toggleViewTitle');
 
 		// Botón de candado
 		const lockButton = controlsContainer.createEl('button', { cls: 'game-lock-toggle' });
 		lockButton.textContent = blockConfig.isLocked ? '🔒' : '🔓';
-		lockButton.title = blockConfig.isLocked ? 'Desbloquear edición' : 'Bloquear edición';
+		lockButton.title = blockConfig.isLocked ? this.t('lockTitleLocked') : this.t('lockTitleUnlocked');
 		lockButton.addEventListener('click', async () => {
 			blockConfig.isLocked = !blockConfig.isLocked;
 			await this.saveBlockConfig(ctx, blockConfig);
 			lockButton.textContent = blockConfig.isLocked ? '🔒' : '🔓';
-			lockButton.title = blockConfig.isLocked ? 'Desbloquear edición' : 'Bloquear edición';
+			lockButton.title = blockConfig.isLocked ? this.t('lockTitleLocked') : this.t('lockTitleUnlocked');
 			if (isTableView) {
 				renderTable();
 			} else {
@@ -515,28 +524,52 @@ export default class GameBacklogPlugin extends Plugin {
 			
 			// Imagen de portada
 			const coverContainer = card.createDiv({ cls: 'game-cover-container' });
-			const cover = coverContainer.createEl('img', { 
-				cls: 'game-cover',
-				attr: {
-					src: this.resolveImageSource(game.cover || this.settings.defaultCoverImage),
-					alt: game.name || 'Game cover'
-				}
-			});
-			
-			// Manejar errores de carga de imagen
-			cover.onerror = () => {
-				cover.src = this.resolveImageSource(this.settings.defaultCoverImage);
+			const nameOverlay = coverContainer.createDiv({ cls: 'game-name-overlay' });
+			nameOverlay.textContent = game.name || this.t('noName');
+
+			const normalizeCoverValue = (value: string): string => {
+				const normalized = (value || '').trim();
+				const emptyAliases = ['null', 'undefined', 'none', 'n/a', 'na', '-'];
+				return emptyAliases.includes(normalized.toLowerCase()) ? '' : normalized;
 			};
 
-			const nameOverlay = coverContainer.createDiv({ cls: 'game-name-overlay' });
-			nameOverlay.textContent = game.name || 'Sin nombre';
+			const gameCover = normalizeCoverValue(game.cover || '');
+			const defaultCover = normalizeCoverValue(this.settings.defaultCoverImage || '');
+			const resolvedGameCover = this.resolveImageSource(gameCover, ctx.sourcePath);
+			const resolvedDefaultCover = this.resolveImageSource(defaultCover, ctx.sourcePath);
+			const coverSource = resolvedGameCover || resolvedDefaultCover;
+
+			if (coverSource) {
+				const cover = coverContainer.createEl('img', {
+					cls: 'game-cover',
+					attr: {
+						src: coverSource,
+						alt: game.name || this.t('noName')
+					}
+				});
+
+				// Si falla la portada del juego, intentar con default. Si no hay default, mostrar solo nombre.
+				cover.onerror = () => {
+					if (resolvedDefaultCover && coverSource !== resolvedDefaultCover) {
+						cover.src = resolvedDefaultCover;
+						return;
+					}
+
+					cover.remove();
+					coverContainer.addClass('game-cover-no-image');
+					nameOverlay.addClass('game-name-overlay-static');
+				};
+			} else {
+				coverContainer.addClass('game-cover-no-image');
+				nameOverlay.addClass('game-name-overlay-static');
+			}
 
 			if (game.platinum) {
 				const platinumBadge = coverContainer.createEl('img', {
 					cls: 'game-platinum-badge',
 					attr: {
 						src: this.getPluginAssetUrl('Platinum.png'),
-						alt: 'Platinum badge'
+						alt: this.t('platinumBadgeAlt')
 					}
 				});
 
@@ -554,7 +587,7 @@ export default class GameBacklogPlugin extends Plugin {
 						cls: 'game-brand-image',
 						attr: {
 							src: brandImageSource,
-							alt: game.platform || 'Platform brand'
+							alt: game.platform || this.t('platformBrandAlt')
 						}
 					});
 
@@ -630,7 +663,7 @@ export default class GameBacklogPlugin extends Plugin {
 			// Header
 			const thead = table.createEl('thead');
 			const headerRow = thead.createEl('tr');
-			['Juego', 'Plataforma', 'Fecha', 'Puntaje', 'Duración'].forEach(header => {
+			[this.t('tableHeaderGame'), this.t('tableHeaderPlatform'), this.t('tableHeaderDate'), this.t('tableHeaderRating'), this.t('tableHeaderDuration')].forEach(header => {
 				headerRow.createEl('th', { text: header });
 			});
 			
@@ -642,11 +675,11 @@ export default class GameBacklogPlugin extends Plugin {
 				
 				// Juego
 				const nameCell = row.createEl('td');
-				nameCell.textContent = game.name || 'Sin nombre';
+				nameCell.textContent = game.name || this.t('noName');
 				
 				// Plataforma
 				const platformCell = row.createEl('td');
-				platformCell.textContent = game.platform || '—';
+				platformCell.textContent = game.platform || this.t('emptyValue');
 				
 				// Fecha
 				const dateCell = row.createEl('td');
@@ -660,7 +693,7 @@ export default class GameBacklogPlugin extends Plugin {
 						dateCell.textContent = game.completionDate;
 					}
 				} else {
-					dateCell.textContent = '—';
+					dateCell.textContent = this.t('emptyValue');
 				}
 				
 				// Puntaje
@@ -668,7 +701,7 @@ export default class GameBacklogPlugin extends Plugin {
 				if (game.rating) {
 					scoreCell.textContent = `${game.rating} ⭐`;
 				} else {
-					scoreCell.textContent = '—';
+					scoreCell.textContent = this.t('emptyValue');
 				}
 				
 				// Duración
@@ -676,7 +709,7 @@ export default class GameBacklogPlugin extends Plugin {
 				if (game.hours && game.hours > 0) {
 					hoursCell.textContent = `${game.hours} hs`;
 				} else {
-					hoursCell.textContent = '—';
+					hoursCell.textContent = this.t('emptyValue');
 				}
 				
 				// Click handler para abrir modal (siempre disponible)
@@ -710,10 +743,10 @@ export default class GameBacklogPlugin extends Plugin {
 			const statsLabels = statsContainer.createDiv({ cls: 'game-stats-labels' });
 			
 			const gamesLabel = statsLabels.createDiv({ cls: 'game-stat-item' });
-			gamesLabel.textContent = `Juegos completados: ${totalGames}`;
+			gamesLabel.textContent = this.t('statsCompleted', { count: totalGames });
 			
 			const hoursLabel = statsLabels.createDiv({ cls: 'game-stat-item' });
-			hoursLabel.textContent = `Horas totales: ${Math.round(totalHours)}~ hs`;
+			hoursLabel.textContent = this.t('statsTotalHours', { hours: Math.round(totalHours) });
 			
 			// Top 3 games
 			const topGamesContainer = statsContainer.createDiv({ cls: 'game-top-games' });
@@ -732,14 +765,14 @@ export default class GameBacklogPlugin extends Plugin {
 				if (blockConfig.isLocked) {
 					// Modo bloqueado: mostrar texto plano
 					const label = topGameRow.createSpan({ cls: 'game-top-game-label' });
-					label.textContent = currentValue || `—`;
+					label.textContent = currentValue || this.t('emptyValue');
 				} else {
 					// Modo edición: mostrar dropdown
 					const select = topGameRow.createEl('select', { cls: 'game-top-game-select' });
 					
 					const emptyOption = select.createEl('option');
 					emptyOption.value = '';
-					emptyOption.textContent = `Seleccionar ${['mejor', 'segundo mejor', 'tercer'][index]} juego...`;
+					emptyOption.textContent = [this.t('topGameSelectBest'), this.t('topGameSelectSecond'), this.t('topGameSelectThird')][index];
 					
 					gameNames.forEach(name => {
 						const option = select.createEl('option');
@@ -799,7 +832,7 @@ export default class GameBacklogPlugin extends Plugin {
 			const newContent = content.replace(codeBlockRegex, `\`\`\`game-backlog\n${updatedBlock}\`\`\``);
 			
 			await this.app.vault.modify(file, newContent);
-			new Notice('Juego agregado al backlog');
+			new Notice(this.t('noticeGameAdded'));
 		}
 	}
 
@@ -852,7 +885,7 @@ export default class GameBacklogPlugin extends Plugin {
 			}
 
 			if (entryIndex === -1) {
-				new Notice('No se pudo encontrar la entrada a editar.');
+				new Notice(this.t('noticeEntryNotFound'));
 				return;
 			}
 
@@ -861,7 +894,7 @@ export default class GameBacklogPlugin extends Plugin {
 			const newContent = content.replace(codeBlockRegex, `\`\`\`game-backlog\n${updatedBlock}\`\`\``);
 			
 			await this.app.vault.modify(file, newContent);
-			new Notice('Juego actualizado');
+			new Notice(this.t('noticeGameUpdated'));
 		}
 	}
 }
@@ -906,14 +939,14 @@ class AddGameModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		
-		contentEl.createEl('h2', { text: this.isEditMode ? 'Editar Juego' : 'Agregar Nuevo Juego' });
+		contentEl.createEl('h2', { text: this.isEditMode ? this.plugin.t('modalEditTitle') : this.plugin.t('modalAddTitle') });
 		
 		// Nombre
 		new Setting(contentEl)
-			.setName('Nombre del juego')
-			.setDesc('Título del videojuego')
+			.setName(this.plugin.t('modalNameLabel'))
+			.setDesc(this.plugin.t('modalNameDesc'))
 			.addText(text => text
-				.setPlaceholder('Ej: The Legend of Zelda')
+				.setPlaceholder(this.plugin.t('modalNamePlaceholder'))
 				.setValue(this.name)
 				.onChange(value => {
 					this.name = value;
@@ -923,11 +956,11 @@ class AddGameModal extends Modal {
 		let coverTextField: HTMLInputElement;
 		const coverSetting = new Setting(contentEl);
 		coverSetting
-			.setName('URL de la portada')
-			.setDesc('Link a la imagen de la portada')
+			.setName(this.plugin.t('modalCoverLabel'))
+			.setDesc(this.plugin.t('modalCoverDesc'))
 			.addText(text => {
 				coverTextField = text.inputEl;
-				text.setPlaceholder('https://ejemplo.com/portada.jpg')
+				text.setPlaceholder(this.plugin.t('modalCoverPlaceholder'))
 					.setValue(this.cover)
 					.onChange(value => {
 						this.cover = value;
@@ -938,11 +971,11 @@ class AddGameModal extends Modal {
 		if (this.cover && /^https?:\/\//.test(this.cover)) {
 			coverSetting.addButton(btn => btn
 				.setButtonText('⬇️')
-				.setTooltip('Descargar imagen remota a carpeta configurada')
+				.setTooltip(this.plugin.t('modalDownloadTooltip'))
 				.onClick(async () => {
 					const activeFile = this.app.workspace.getActiveFile();
 					if (!activeFile) {
-						new Notice('No hay archivo abierto');
+						new Notice(this.plugin.t('noticeNoActiveFile'));
 						return;
 					}
 
@@ -958,15 +991,15 @@ class AddGameModal extends Modal {
 							coverTextField.value = downloadPath;
 							coverTextField.dispatchEvent(new Event('input', { bubbles: true }));
 						}
-						new Notice('Imagen descargada exitosamente');
+						new Notice(this.plugin.t('noticeImageDownloaded'));
 					}
 				}));
 		}
 		
 		// Rating
 		new Setting(contentEl)
-			.setName('Puntuación')
-			.setDesc('Del 1 al 5')
+			.setName(this.plugin.t('modalRatingLabel'))
+			.setDesc(this.plugin.t('modalRatingDesc'))
 			.addSlider(slider => slider
 				.setLimits(1, 5, 1)
 				.setValue(this.rating)
@@ -977,8 +1010,8 @@ class AddGameModal extends Modal {
 		
 		// Fecha de completación
 		new Setting(contentEl)
-			.setName('Fecha de completación')
-			.setDesc('Fecha en que terminaste el juego')
+			.setName(this.plugin.t('modalCompletionDateLabel'))
+			.setDesc(this.plugin.t('modalCompletionDateDesc'))
 			.addText(text => text
 				.setPlaceholder('YYYY-MM-DD')
 				.setValue(this.completionDate)
@@ -989,8 +1022,8 @@ class AddGameModal extends Modal {
 		
 		// Plataforma - Dropdown
 		new Setting(contentEl)
-			.setName('Plataforma')
-			.setDesc('Consola o plataforma donde lo jugaste')
+			.setName(this.plugin.t('modalPlatformLabel'))
+			.setDesc(this.plugin.t('modalPlatformDesc'))
 			.addDropdown(dropdown => {
 				Object.values(GamePlatform).forEach(platform => {
 					dropdown.addOption(platform, platform);
@@ -1004,8 +1037,8 @@ class AddGameModal extends Modal {
 
 		// Horas jugadas
 		new Setting(contentEl)
-			.setName('Horas jugadas')
-			.setDesc('Cantidad de horas (acepta decimales, ej: 2.5)')
+			.setName(this.plugin.t('modalHoursLabel'))
+			.setDesc(this.plugin.t('modalHoursDesc'))
 			.addText(text => text
 				.setPlaceholder('0')
 				.setValue(String(this.hours))
@@ -1015,8 +1048,8 @@ class AddGameModal extends Modal {
 				.inputEl.type = 'number');
 
 		new Setting(contentEl)
-			.setName('Platinado')
-			.setDesc('Logro de platino obtenido')
+			.setName(this.plugin.t('modalPlatinumLabel'))
+			.setDesc(this.plugin.t('modalPlatinumDesc'))
 			.addToggle(toggle => toggle
 				.setValue(this.platinum)
 				.onChange(value => {
@@ -1026,7 +1059,7 @@ class AddGameModal extends Modal {
 		// Botones
 		new Setting(contentEl)
 			.addButton(btn => btn
-				.setButtonText(this.isEditMode ? 'Guardar' : 'Agregar')
+				.setButtonText(this.isEditMode ? this.plugin.t('buttonSave') : this.plugin.t('buttonAdd'))
 				.setCta()
 				.onClick(() => {
 					this.onSubmit({
@@ -1042,7 +1075,7 @@ class AddGameModal extends Modal {
 					this.close();
 				}))
 			.addButton(btn => btn
-				.setButtonText('Cancelar')
+				.setButtonText(this.plugin.t('buttonCancel'))
 				.onClick(() => {
 					this.close();
 				}));
@@ -1072,7 +1105,7 @@ class GameViewModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		contentEl.createEl('h2', { text: this.game.name || 'Sin nombre' });
+		contentEl.createEl('h2', { text: this.game.name || this.plugin.t('noName') });
 
 		// Contenedor de información
 		const infoContainer = contentEl.createDiv({ cls: 'game-view-info' });
@@ -1080,7 +1113,7 @@ class GameViewModal extends Modal {
 		// Rating
 		const ratingContainer = infoContainer.createDiv({ cls: 'game-view-item' });
 		const ratingLabel = ratingContainer.createSpan({ cls: 'game-view-label' });
-		ratingLabel.textContent = 'Puntuación: ';
+		ratingLabel.textContent = this.plugin.t('viewRatingLabel');
 		const ratingValue = ratingContainer.createSpan({ cls: 'game-view-value' });
 		for (let i = 1; i <= 5; i++) {
 			ratingValue.createSpan({
@@ -1093,7 +1126,7 @@ class GameViewModal extends Modal {
 		if (this.game.platform) {
 			const platformContainer = infoContainer.createDiv({ cls: 'game-view-item' });
 			const platformLabel = platformContainer.createSpan({ cls: 'game-view-label' });
-			platformLabel.textContent = 'Plataforma: ';
+			platformLabel.textContent = this.plugin.t('viewPlatformLabel');
 			const platformValue = platformContainer.createSpan({ cls: 'game-view-value' });
 			platformValue.textContent = this.game.platform;
 		}
@@ -1102,11 +1135,11 @@ class GameViewModal extends Modal {
 		if (this.game.completionDate) {
 			const dateContainer = infoContainer.createDiv({ cls: 'game-view-item' });
 			const dateLabel = dateContainer.createSpan({ cls: 'game-view-label' });
-			dateLabel.textContent = 'Completado: ';
+			dateLabel.textContent = this.plugin.t('viewCompletedLabel');
 			const dateValue = dateContainer.createSpan({ cls: 'game-view-value' });
 			const parsed = new Date(this.game.completionDate);
 			if (!Number.isNaN(parsed.getTime())) {
-				const locale = navigator.language || 'es-ES';
+				const locale = this.plugin.getDateLocale();
 				dateValue.textContent = new Intl.DateTimeFormat(locale, {
 					day: 'numeric',
 					month: 'long',
@@ -1121,7 +1154,7 @@ class GameViewModal extends Modal {
 		if (this.game.hours && this.game.hours > 0) {
 			const hoursContainer = infoContainer.createDiv({ cls: 'game-view-item' });
 			const hoursLabel = hoursContainer.createSpan({ cls: 'game-view-label' });
-			hoursLabel.textContent = 'Horas jugadas: ';
+			hoursLabel.textContent = this.plugin.t('viewHoursLabel');
 			const hoursValue = hoursContainer.createSpan({ cls: 'game-view-value' });
 			hoursValue.textContent = `${this.game.hours} hs`;
 		}
@@ -1130,15 +1163,15 @@ class GameViewModal extends Modal {
 		if (this.game.platinum) {
 			const platinumContainer = infoContainer.createDiv({ cls: 'game-view-item' });
 			const platinumLabel = platinumContainer.createSpan({ cls: 'game-view-label' });
-			platinumLabel.textContent = 'Estado: ';
+			platinumLabel.textContent = this.plugin.t('viewStatusLabel');
 			const platinumValue = platinumContainer.createSpan({ cls: 'game-view-value' });
-			platinumValue.textContent = '🏆 Platinado';
+			platinumValue.textContent = this.plugin.t('viewStatusPlatinum');
 		}
 
 		// Botón Editar (solo si está habilitada la edición)
 		if (this.canEdit) {
 			const buttonContainer = contentEl.createDiv({ cls: 'game-view-buttons' });
-			const editButton = buttonContainer.createEl('button', { text: 'Editar' });
+			const editButton = buttonContainer.createEl('button', { text: this.plugin.t('buttonEdit') });
 			editButton.addEventListener('click', () => {
 				this.close();
 				new AddGameModal(this.app, (editedGame) => {
@@ -1167,13 +1200,26 @@ class GameBacklogSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: 'Configuración de Game Backlog' });
+		containerEl.createEl('h2', { text: this.plugin.t('settingsTitle') });
 
 		new Setting(containerEl)
-			.setName('Imagen de portada por defecto')
-			.setDesc('URL de la imagen a mostrar cuando no se especifica portada')
+			.setName(this.plugin.t('settingsLanguageName'))
+			.setDesc(this.plugin.t('settingsLanguageDesc'))
+			.addDropdown(dropdown => dropdown
+				.addOption('es', this.plugin.t('languageSpanish'))
+				.addOption('en', this.plugin.t('languageEnglish'))
+				.setValue(this.plugin.settings.language)
+				.onChange(async (value) => {
+					this.plugin.settings.language = value as AppLanguage;
+					await this.plugin.saveSettings();
+					this.display();
+				}));
+
+		new Setting(containerEl)
+			.setName(this.plugin.t('settingsDefaultCoverName'))
+			.setDesc(this.plugin.t('settingsDefaultCoverDesc'))
 			.addText(text => text
-				.setPlaceholder('https://ejemplo.com/default.jpg')
+				.setPlaceholder(this.plugin.t('settingsDefaultCoverPlaceholder'))
 				.setValue(this.plugin.settings.defaultCoverImage)
 				.onChange(async (value) => {
 					this.plugin.settings.defaultCoverImage = value;
@@ -1181,12 +1227,12 @@ class GameBacklogSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Platform mode')
-			.setDesc('None: no muestra plataforma, Image: logo en esquina inferior derecha, Label: etiqueta con icono y nombre')
+			.setName(this.plugin.t('settingsPlatformModeName'))
+			.setDesc(this.plugin.t('settingsPlatformModeDesc'))
 			.addDropdown(dropdown => dropdown
-				.addOption('none', 'None')
-				.addOption('image', 'Image')
-				.addOption('label', 'Label')
+				.addOption('none', this.plugin.t('platformModeNone'))
+				.addOption('image', this.plugin.t('platformModeImage'))
+				.addOption('label', this.plugin.t('platformModeLabel'))
 				.setValue(this.plugin.settings.platformMode)
 				.onChange(async (value) => {
 					this.plugin.settings.platformMode = value as PlatformMode;
@@ -1194,10 +1240,10 @@ class GameBacklogSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Carpeta de descarga de imágenes')
-			.setDesc('Carpeta en el vault donde se descargarán las imágenes remotas. Si está vacía, se usará la carpeta del archivo')
+			.setName(this.plugin.t('settingsDownloadFolderName'))
+			.setDesc(this.plugin.t('settingsDownloadFolderDesc'))
 			.addText(text => text
-				.setPlaceholder('attachments')
+				.setPlaceholder(this.plugin.t('settingsDownloadFolderPlaceholder'))
 				.setValue(this.plugin.settings.imageDownloadFolder)
 				.onChange(async (value) => {
 					this.plugin.settings.imageDownloadFolder = value;
