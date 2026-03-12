@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, MarkdownPostProcessorContext, Modal, Notice, TFile } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, MarkdownPostProcessorContext, Modal, Notice, TFile, requestUrl } from 'obsidian';
 
 enum GamePlatform {
 	SWITCH = 'Switch',
@@ -278,11 +278,70 @@ export default class GameBacklogPlugin extends Plugin {
 			// Construir ruta de destino completa
 			const filePath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
 
-			// Descargar imagen
-			const response = await fetch(url);
-			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+			// Intentar descargar con múltiples estrategias
+			let arrayBuffer: ArrayBuffer | null = null;
 
-			const arrayBuffer = await response.arrayBuffer();
+			// Estrategia 1: requestUrl (Obsidian desktop request, evita problemas típicos de CORS)
+			try {
+				const response = await requestUrl({
+					url,
+					method: 'GET',
+					headers: {
+						'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+					}
+				});
+				arrayBuffer = response.arrayBuffer;
+			} catch (e) {
+				console.warn('[game-backlog] requestUrl failed, trying fetch...');
+			}
+
+			// Estrategia 2: Fetch con User-Agent (simula navegador real)
+			try {
+				if (!arrayBuffer) {
+					const response = await fetch(url, {
+						headers: {
+							'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+						}
+					});
+					if (response.ok) {
+						arrayBuffer = await response.arrayBuffer();
+					}
+				}
+			} catch (e) {
+				console.warn('[game-backlog] Fetch with User-Agent failed, trying alternative method...');
+			}
+
+			// Estrategia 3: Intentar con Node.js nativo si está disponible (Electron)
+			if (!arrayBuffer) {
+				try {
+					const https = await import('https');
+					const http = await import('http');
+
+					arrayBuffer = await new Promise((resolve, reject) => {
+						const protocolModule = url.startsWith('https') ? https : http;
+						(protocolModule as any).get(url, {
+							headers: {
+								'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+							}
+						}, (res: any) => {
+							const chunks: Buffer[] = [];
+							res.on('data', (chunk: any) => chunks.push(Buffer.from(chunk)));
+							res.on('end', () => {
+								const merged = Buffer.concat(chunks);
+								const exact = merged.buffer.slice(merged.byteOffset, merged.byteOffset + merged.byteLength);
+								resolve(exact);
+							});
+							res.on('error', reject);
+						}).on('error', reject);
+					});
+				} catch (e) {
+					console.warn('[game-backlog] Node.js method not available or failed');
+				}
+			}
+
+			if (!arrayBuffer) {
+				throw new Error('No se pudo descargar la imagen. El servidor puede tener restricciones CORS o estar caído.');
+			}
 
 			// Guardar archivo, sobrescribiendo si existe
 			const existingFile = this.app.vault.getAbstractFileByPath(filePath);
@@ -296,7 +355,8 @@ export default class GameBacklogPlugin extends Plugin {
 			return filePath;
 		} catch (error) {
 			console.error('[game-backlog] Download error:', error);
-			new Notice(`Error descargando imagen: ${error}`);
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			new Notice(`Error descargando imagen: ${errorMsg}`);
 			return url;
 		}
 	}
