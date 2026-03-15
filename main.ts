@@ -5,13 +5,103 @@ enum GamePlatform {
 	SWITCH = 'Switch',
 	PC = 'PC',
 	STEAM_DECK = 'Steam Deck',
-	PS_VITA = 'PS Vita',
-	PS2 = 'PS2',
-	PS1 = 'PS1',
+	PS_VITA = 'Playstation Vita',
+	PS1 = 'Playstation 1',
+	PS2 = 'Playstation 2',
+	PS3 = 'Playstation 3',
+	PS4 = 'Playstation 4',
+	PS5 = 'Playstation 5',
 	NINTENDO_3DS = '3DS',
 	NINTENDO_DS = 'DS',
-	GBA = 'GBA'
+	GBA = 'Game Boy Advance',
+	DREAMCAST = 'Dreamcast',
+	PSP = 'Playstation Portable',
+	GAMECUBE = 'GameCube',
+	GB = 'Game Boy',
+	GBC = 'Game Boy Color',
+	NES = 'NES',
+	SNES = 'SNES',
+	GENESIS = 'Genesis',
+	N64 = 'N64',
+	VIRTUAL_BOY = 'Virtual Boy',
+	WII_U = 'Wii U',
+	XBOX = 'Xbox',
+	XBOX_360 = 'Xbox 360',
+	XBOX_ONE = 'Xbox One',
+	XBOX_SERIES = 'Xbox Series X/S',
+	WII = 'Wii',
+	MAME = 'MAME',
+	DOS = 'DOS',
+	NEO_GEO = 'Neo Geo',
+	SEGA_SATURN = 'Saturn',
+	ATARI_2600 = 'Atari 2600'
 }
+
+const PLATFORM_GROUPS: Array<{ label: string; platforms: GamePlatform[] }> = [
+	{
+		label: 'Nintendo',
+		platforms: [
+			GamePlatform.SWITCH,
+			GamePlatform.NINTENDO_3DS,
+			GamePlatform.NINTENDO_DS,
+			GamePlatform.GBA,
+			GamePlatform.GAMECUBE,
+			GamePlatform.GB,
+			GamePlatform.GBC,
+			GamePlatform.NES,
+			GamePlatform.SNES,
+			GamePlatform.N64,
+			GamePlatform.VIRTUAL_BOY,
+			GamePlatform.WII_U,
+			GamePlatform.WII
+		]
+	},
+	{
+		label: 'Sony',
+		platforms: [
+			GamePlatform.PS_VITA,
+			GamePlatform.PSP,
+			GamePlatform.PS1,
+			GamePlatform.PS2,
+			GamePlatform.PS3,
+			GamePlatform.PS4,
+			GamePlatform.PS5
+		]
+	},
+	{
+		label: 'Microsoft',
+		platforms: [
+			GamePlatform.XBOX,
+			GamePlatform.XBOX_360,
+			GamePlatform.XBOX_ONE,
+			GamePlatform.XBOX_SERIES
+		]
+	},
+	{
+		label: 'Sega',
+		platforms: [
+			GamePlatform.DREAMCAST,
+			GamePlatform.GENESIS,
+			GamePlatform.SEGA_SATURN
+		]
+	},
+	{
+		label: 'PC',
+		platforms: [
+			GamePlatform.PC,
+			GamePlatform.STEAM_DECK,
+			GamePlatform.DOS
+		]
+	},
+	{
+		label: 'Arcade / Other',
+		platforms: [
+			GamePlatform.MAME,
+			GamePlatform.NEO_GEO,
+			GamePlatform.ATARI_2600
+		]
+	}
+];
 
 interface GameEntry {
 	id: string;
@@ -46,7 +136,7 @@ interface GameBacklogSettings {
 
 const DEFAULT_SETTINGS: GameBacklogSettings = {
 	language: 'es',
-	defaultCoverImage: 'https://via.placeholder.com/300x400?text=No+Cover',
+	defaultCoverImage: '',
 	platformMode: 'image',
 	imageDownloadFolder: ''
 }
@@ -77,7 +167,7 @@ export default class GameBacklogPlugin extends Plugin {
 					'cover: ',
 					'rating: 3',
 					'date: ',
-					'platform: Switch',
+					'platform: Nintendo Switch',
 					'hours: 0',
 					'platinum: false',
 					'```'
@@ -161,33 +251,25 @@ export default class GameBacklogPlugin extends Plugin {
 					currentGame.id = value;
 					break;
 				case 'name':
-				case 'nombre':
 					currentGame.name = value;
 					break;
 				case 'cover':
-				case 'portada':
 					currentGame.cover = value;
 					break;
 				case 'rating':
-				case 'puntuacion':
-				case 'puntuación':
 					currentGame.rating = parseInt(value) || 0;
 					break;
 				case 'date':
-				case 'fecha':
 					currentGame.completionDate = value;
 					break;
 				case 'platform':
-				case 'plataforma':
 					currentGame.platform = this.parsePlatform(value);
 					break;
 				case 'hours':
-				case 'horas':
 					currentGame.hours = parseFloat(value) || 0;
 					break;
 				case 'platinum':
-				case 'platinado':
-					currentGame.platinum = ['true', '1', 'si', 'sí', 'yes'].includes(value.toLowerCase());
+					currentGame.platinum = ['true', '1', 'yes'].includes(value.toLowerCase());
 					break;
 			}
 		}
@@ -210,30 +292,17 @@ export default class GameBacklogPlugin extends Plugin {
 	}
 
 	parsePlatform(value: string): GamePlatform {
-		const normalized = value.toLowerCase().trim();
-		const platformMap: { [key: string]: GamePlatform } = {
-			'switch': GamePlatform.SWITCH,
-			'nintendo switch': GamePlatform.SWITCH,
-			'pc': GamePlatform.PC,
-			'windows': GamePlatform.PC,
-			'steam deck': GamePlatform.STEAM_DECK,
-			'steamdeck': GamePlatform.STEAM_DECK,
-			'ps vita': GamePlatform.PS_VITA,
-			'vita': GamePlatform.PS_VITA,
-			'ps2': GamePlatform.PS2,
-			'playstation 2': GamePlatform.PS2,
-			'playstation2': GamePlatform.PS2,
-			'ps1': GamePlatform.PS1,
-			'playstation 1': GamePlatform.PS1,
-			'playstation1': GamePlatform.PS1,
-			'3ds': GamePlatform.NINTENDO_3DS,
-			'nintendo 3ds': GamePlatform.NINTENDO_3DS,
-			'ds': GamePlatform.NINTENDO_DS,
-			'nintendo ds': GamePlatform.NINTENDO_DS,
-			'gba': GamePlatform.GBA,
-			'game boy advance': GamePlatform.GBA
-		};
-		return platformMap[normalized] || GamePlatform.SWITCH;
+		const trimmed = value.trim();
+		const platforms = Object.values(GamePlatform);
+
+		const exactMatch = platforms.find((platform) => platform === trimmed);
+		if (exactMatch) {
+			return exactMatch;
+		}
+
+		const normalized = trimmed.toLowerCase();
+		const caseInsensitiveMatch = platforms.find((platform) => platform.toLowerCase() === normalized);
+		return caseInsensitiveMatch || GamePlatform.SWITCH;
 	}
 
 	getPlatformLogo(platform: GamePlatform): string {
@@ -246,25 +315,33 @@ export default class GameBacklogPlugin extends Plugin {
 			[GamePlatform.PS1]: 'PS1.png',
 			[GamePlatform.NINTENDO_3DS]: '3DS.png',
 			[GamePlatform.NINTENDO_DS]: 'DS.png',
-			[GamePlatform.GBA]: 'GBA.png'
+			[GamePlatform.GBA]: 'GBA.png',
+			[GamePlatform.PS3]: 'PS3.png',
+			[GamePlatform.PS4]: 'PS4.png',
+			[GamePlatform.PS5]: 'PS5.png',
+			[GamePlatform.DREAMCAST]: 'Dreamcast.png',
+			[GamePlatform.PSP]: 'PSP.png',
+			[GamePlatform.GAMECUBE]: 'GameCube.png',
+			[GamePlatform.GB]: 'GB.png',
+			[GamePlatform.GBC]: 'GBC.png',
+			[GamePlatform.NES]: 'NES.png',
+			[GamePlatform.SNES]: 'SNES.png',
+			[GamePlatform.GENESIS]: 'Genesis.png',
+			[GamePlatform.N64]: 'N64.png',
+			[GamePlatform.VIRTUAL_BOY]: 'Virtual Boy.png',
+			[GamePlatform.WII_U]: 'Wii U.png',
+			[GamePlatform.XBOX]: 'Xbox.png',
+			[GamePlatform.XBOX_360]: 'Xbox 360.png',
+			[GamePlatform.XBOX_ONE]: 'Xbox One.png',
+			[GamePlatform.XBOX_SERIES]: 'Xbox Series.png',
+			[GamePlatform.WII]: 'Wii.png',
+			[GamePlatform.MAME]: 'MAME.png',
+			[GamePlatform.DOS]: 'DOS.png',
+			[GamePlatform.NEO_GEO]: 'Neo Geo.png',
+			[GamePlatform.SEGA_SATURN]: 'Sega Saturn.png',
+			[GamePlatform.ATARI_2600]: 'Atari 2600.png'
 		};
 		return logoMap[platform] || '';
-	}
-
-	getPlatformLabelIcon(platform: GamePlatform): string {
-		const iconMap: { [key in GamePlatform]: string } = {
-			[GamePlatform.SWITCH]: '🎮',
-			[GamePlatform.PC]: '🖥️',
-			[GamePlatform.STEAM_DECK]: '🕹️',
-			[GamePlatform.PS_VITA]: '🎮',
-			[GamePlatform.PS2]: '🎮',
-			[GamePlatform.PS1]: '🎮',
-			[GamePlatform.NINTENDO_3DS]: '🎮',
-			[GamePlatform.NINTENDO_DS]: '🎮',
-			[GamePlatform.GBA]: '🎮'
-		};
-
-		return iconMap[platform] || '🎮';
 	}
 
 	async downloadRemoteImage(url: string, destFolder: string | null, sourceFile: TFile): Promise<string> {
@@ -517,9 +594,12 @@ export default class GameBacklogPlugin extends Plugin {
 			const grid = cardsContainer.createDiv({ cls: 'game-backlog-grid' });
 		
 		games.forEach(game => {
-			const card = grid.createDiv({ cls: 'game-card' });
+			let card: HTMLElement;
 			if (game.platinum) {
-				card.addClass('game-card-platinum');
+				const wrapper = grid.createDiv({ cls: 'game-card-platinum-wrapper' });
+				card = wrapper.createDiv({ cls: 'game-card' });
+			} else {
+				card = grid.createDiv({ cls: 'game-card' });
 			}
 			
 			// Imagen de portada
@@ -594,9 +674,6 @@ export default class GameBacklogPlugin extends Plugin {
 					brandImage.onerror = () => {
 						brandImage.remove();
 					};
-
-					const platformLabel = brandContainer.createDiv({ cls: 'game-brand-platform-label' });
-					platformLabel.textContent = game.platform || '';
 				}
 			}
 			
@@ -622,7 +699,7 @@ export default class GameBacklogPlugin extends Plugin {
 
 			if (this.settings.platformMode === 'label' && game.platform) {
 				const platform = details.createDiv({ cls: 'game-platform' });
-				platform.textContent = `${this.getPlatformLabelIcon(game.platform)} ${game.platform}`;
+				platform.textContent = `🎮 ${game.platform}`;
 			}
 
 
@@ -1025,9 +1102,28 @@ class AddGameModal extends Modal {
 			.setName(this.plugin.t('modalPlatformLabel'))
 			.setDesc(this.plugin.t('modalPlatformDesc'))
 			.addDropdown(dropdown => {
-				Object.values(GamePlatform).forEach(platform => {
-					dropdown.addOption(platform, platform);
+				const selectEl = dropdown.selectEl;
+
+				PLATFORM_GROUPS.forEach((group, groupIndex) => {
+					const groupHeader = document.createElement('option');
+					groupHeader.textContent = `--- ${group.label} ---`;
+					groupHeader.disabled = true;
+					groupHeader.value = '';
+					selectEl.appendChild(groupHeader);
+
+					group.platforms.forEach((platform) => {
+						dropdown.addOption(platform, platform);
+					});
+
+					// if (groupIndex < PLATFORM_GROUPS.length - 1) {
+					// 	const separator = document.createElement('option');
+					// 	separator.textContent = '──────────';
+					// 	separator.disabled = true;
+					// 	separator.value = '';
+					// 	selectEl.appendChild(separator);
+					// }
 				});
+
 				dropdown
 					.setValue(this.platform)
 					.onChange(value => {
