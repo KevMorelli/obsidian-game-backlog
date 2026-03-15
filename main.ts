@@ -39,31 +39,39 @@ enum GamePlatform {
 
 const PLATFORM_GROUPS: Array<{ label: string; platforms: GamePlatform[] }> = [
 	{
+		label: 'PC',
+		platforms: [
+			GamePlatform.DOS,
+			GamePlatform.PC,
+			GamePlatform.STEAM_DECK
+		]
+	},
+	{
 		label: 'Nintendo',
 		platforms: [
-			GamePlatform.SWITCH,
-			GamePlatform.NINTENDO_3DS,
-			GamePlatform.NINTENDO_DS,
+			GamePlatform.NES,
+			GamePlatform.GB,
+			GamePlatform.SNES,
+			GamePlatform.VIRTUAL_BOY,
+			GamePlatform.N64,
+			GamePlatform.GBC,
 			GamePlatform.GBA,
 			GamePlatform.GAMECUBE,
-			GamePlatform.GB,
-			GamePlatform.GBC,
-			GamePlatform.NES,
-			GamePlatform.SNES,
-			GamePlatform.N64,
-			GamePlatform.VIRTUAL_BOY,
+			GamePlatform.NINTENDO_DS,
+			GamePlatform.WII,
+			GamePlatform.NINTENDO_3DS,
 			GamePlatform.WII_U,
-			GamePlatform.WII
+			GamePlatform.SWITCH
 		]
 	},
 	{
 		label: 'Sony',
 		platforms: [
-			GamePlatform.PS_VITA,
-			GamePlatform.PSP,
 			GamePlatform.PS1,
 			GamePlatform.PS2,
+			GamePlatform.PSP,
 			GamePlatform.PS3,
+			GamePlatform.PS_VITA,
 			GamePlatform.PS4,
 			GamePlatform.PS5
 		]
@@ -80,25 +88,17 @@ const PLATFORM_GROUPS: Array<{ label: string; platforms: GamePlatform[] }> = [
 	{
 		label: 'Sega',
 		platforms: [
-			GamePlatform.DREAMCAST,
 			GamePlatform.GENESIS,
-			GamePlatform.SEGA_SATURN
-		]
-	},
-	{
-		label: 'PC',
-		platforms: [
-			GamePlatform.PC,
-			GamePlatform.STEAM_DECK,
-			GamePlatform.DOS
+			GamePlatform.SEGA_SATURN,
+			GamePlatform.DREAMCAST
 		]
 	},
 	{
 		label: 'Arcade / Other',
 		platforms: [
-			GamePlatform.MAME,
+			GamePlatform.ATARI_2600,
 			GamePlatform.NEO_GEO,
-			GamePlatform.ATARI_2600
+			GamePlatform.MAME
 		]
 	}
 ];
@@ -167,7 +167,7 @@ export default class GameBacklogPlugin extends Plugin {
 					'cover: ',
 					'rating: 3',
 					'date: ',
-					'platform: Nintendo Switch',
+					'platform: PC',
 					'hours: 0',
 					'platinum: false',
 					'```'
@@ -302,7 +302,7 @@ export default class GameBacklogPlugin extends Plugin {
 
 		const normalized = trimmed.toLowerCase();
 		const caseInsensitiveMatch = platforms.find((platform) => platform.toLowerCase() === normalized);
-		return caseInsensitiveMatch || GamePlatform.SWITCH;
+		return caseInsensitiveMatch || GamePlatform.PC;
 	}
 
 	getPlatformLogo(platform: GamePlatform): string {
@@ -986,7 +986,7 @@ class AddGameModal extends Modal {
 	cover: string = '';
 	rating: number = 3;
 	completionDate: string = '';
-	platform: GamePlatform = GamePlatform.SWITCH;
+	platform: GamePlatform = GamePlatform.PC;
 	hours: number = 0;
 	platinum: boolean = false;
 
@@ -1002,7 +1002,7 @@ class AddGameModal extends Modal {
 			this.cover = existingGame.cover || '';
 			this.rating = existingGame.rating || 3;
 			this.completionDate = existingGame.completionDate || '';
-			this.platform = existingGame.platform || GamePlatform.SWITCH;
+			this.platform = existingGame.platform || GamePlatform.PC;
 			this.hours = existingGame.hours || 0;
 			this.platinum = existingGame.platinum || false;
 		} else {

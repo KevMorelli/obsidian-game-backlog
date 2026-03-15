@@ -154,7 +154,8 @@
 
 .game-brand-image {
 	width: auto;
-	max-width: 65px;
+	max-width: 50px !important;
+	max-height: 50px !important;
 	display: block;
 	box-shadow: none !important;
 	filter: none !important;
