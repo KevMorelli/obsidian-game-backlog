@@ -120,6 +120,7 @@ function generateGameId(): string {
 
 interface BlockConfig {
 	isLocked: boolean;
+	viewMode: 'grid' | 'table';
 	topGame1: string;
 	topGame2: string;
 	topGame3: string;
@@ -130,6 +131,7 @@ type PlatformMode = 'none' | 'image' | 'label';
 interface GameBacklogSettings {
 	language: AppLanguage;
 	defaultCoverImage: string;
+	defaultPlatform: GamePlatform;
 	platformMode: PlatformMode;
 	imageDownloadFolder: string;
 }
@@ -137,6 +139,7 @@ interface GameBacklogSettings {
 const DEFAULT_SETTINGS: GameBacklogSettings = {
 	language: 'es',
 	defaultCoverImage: '',
+	defaultPlatform: GamePlatform.PC,
 	platformMode: 'image',
 	imageDownloadFolder: ''
 }
@@ -159,6 +162,7 @@ export default class GameBacklogPlugin extends Plugin {
 			id: 'insert-game-backlog-block',
 			name: this.t('commandInsertBlock'),
 			editorCallback: (editor) => {
+				const defaultPlatform = this.settings.defaultPlatform || GamePlatform.PC;
 				const defaultBlock = [
 					'```game-backlog',
 					'---',
@@ -167,7 +171,7 @@ export default class GameBacklogPlugin extends Plugin {
 					'cover: ',
 					'rating: 3',
 					'date: ',
-					'platform: PC',
+					`platform: ${defaultPlatform}`,
 					'hours: 0',
 					'platinum: false',
 					'```'
@@ -229,6 +233,9 @@ export default class GameBacklogPlugin extends Plugin {
 					if (!currentGame.id) {
 						currentGame.id = generateGameId();
 					}
+					if (!currentGame.platform) {
+						currentGame.platform = this.settings.defaultPlatform;
+					}
 					if (typeof currentGame.platinum !== 'boolean') {
 						currentGame.platinum = false;
 					}
@@ -279,6 +286,9 @@ export default class GameBacklogPlugin extends Plugin {
 			if (!currentGame.id) {
 				currentGame.id = generateGameId();
 			}
+			if (!currentGame.platform) {
+				currentGame.platform = this.settings.defaultPlatform;
+			}
 			if (typeof currentGame.platinum !== 'boolean') {
 				currentGame.platinum = false;
 			}
@@ -294,6 +304,11 @@ export default class GameBacklogPlugin extends Plugin {
 	parsePlatform(value: string): GamePlatform {
 		const trimmed = value.trim();
 		const platforms = Object.values(GamePlatform);
+		const fallbackPlatform = this.settings.defaultPlatform || DEFAULT_SETTINGS.defaultPlatform;
+
+		if (!trimmed) {
+			return fallbackPlatform;
+		}
 
 		const exactMatch = platforms.find((platform) => platform === trimmed);
 		if (exactMatch) {
@@ -302,7 +317,7 @@ export default class GameBacklogPlugin extends Plugin {
 
 		const normalized = trimmed.toLowerCase();
 		const caseInsensitiveMatch = platforms.find((platform) => platform.toLowerCase() === normalized);
-		return caseInsensitiveMatch || GamePlatform.PC;
+		return caseInsensitiveMatch || fallbackPlatform;
 	}
 
 	getPlatformLogo(platform: GamePlatform): string {
@@ -505,7 +520,7 @@ export default class GameBacklogPlugin extends Plugin {
 	}
 
 	parseBlockConfig(source: string): BlockConfig {
-		const config: BlockConfig = { isLocked: false, topGame1: '', topGame2: '', topGame3: '' };
+		const config: BlockConfig = { isLocked: false, viewMode: 'grid', topGame1: '', topGame2: '', topGame3: '' };
 		const lines = source.split('\n');
 		for (const line of lines) {
 			const trimmed = line.trim();
@@ -516,6 +531,7 @@ export default class GameBacklogPlugin extends Plugin {
 			const value = trimmed.slice(colonIdx + 1).trim();
 			switch (key) {
 				case 'islocked': config.isLocked = value === 'true'; break;
+				case 'viewmode': config.viewMode = value === 'table' ? 'table' : 'grid'; break;
 				case 'topgame1': config.topGame1 = value; break;
 				case 'topgame2': config.topGame2 = value; break;
 				case 'topgame3': config.topGame3 = value; break;
@@ -537,7 +553,7 @@ export default class GameBacklogPlugin extends Plugin {
 		const firstDashIdx = originalBlock.indexOf('---');
 		const entriesPart = firstDashIdx !== -1 ? originalBlock.slice(firstDashIdx) : originalBlock;
 
-		const configSection = `isLocked: ${config.isLocked}\ntopGame1: ${config.topGame1}\ntopGame2: ${config.topGame2}\ntopGame3: ${config.topGame3}\n`;
+		const configSection = `isLocked: ${config.isLocked}\nviewMode: ${config.viewMode}\ntopGame1: ${config.topGame1}\ntopGame2: ${config.topGame2}\ntopGame3: ${config.topGame3}\n`;
 		const newBlock = configSection + entriesPart;
 		const newContent = content.replace(codeBlockRegex, '\`\`\`game-backlog\n' + newBlock + '\`\`\`');
 		await this.app.vault.modify(file, newContent);
@@ -551,13 +567,13 @@ export default class GameBacklogPlugin extends Plugin {
 		const container = el.createDiv({ cls: 'game-backlog-container' });
 		
 		// Estado de vista (tarjetas o tabla)
-		let isTableView = false;
+		let isTableView = blockConfig.viewMode === 'table';
 		
 		// Contenedor de controles
 		const controlsContainer = container.createDiv({ cls: 'game-backlog-controls' });
 		
 		// Botón de toggle vista
-		const toggleButton = controlsContainer.createEl('button', { cls: 'game-view-toggle', text: '📊' });
+		const toggleButton = controlsContainer.createEl('button', { cls: 'game-view-toggle', text: isTableView ? '🃏' : '📊' });
 		toggleButton.title = this.t('toggleViewTitle');
 
 		// Botón de candado
@@ -752,7 +768,18 @@ export default class GameBacklogPlugin extends Plugin {
 				
 				// Juego
 				const nameCell = row.createEl('td');
-				nameCell.textContent = game.name || this.t('noName');
+				nameCell.addClass('game-table-name-cell');
+				const gameName = game.name || this.t('noName');
+				const nameContent = nameCell.createSpan({ cls: 'game-table-name-content' });
+				const platinumIcon = nameContent.createSpan({ cls: 'game-table-platinum-icon' });
+				if (game.platinum) {
+					platinumIcon.textContent = '🏆';
+				} else {
+					platinumIcon.addClass('is-empty');
+					platinumIcon.textContent = '🏆';
+				}
+				const nameText = nameContent.createSpan({ cls: 'game-table-name-text' });
+				nameText.textContent = gameName;
 				
 				// Plataforma
 				const platformCell = row.createEl('td');
@@ -868,16 +895,26 @@ export default class GameBacklogPlugin extends Plugin {
 			});
 		};
 		
-		// Renderizar inicial con tarjetas
-		renderCards();
+		// Renderizar inicial segun estado guardado en el bloque
+		if (isTableView) {
+			cardsContainer.style.display = 'none';
+			tableContainer.style.display = 'block';
+			renderTable();
+		} else {
+			cardsContainer.style.display = 'block';
+			tableContainer.style.display = 'none';
+			renderCards();
+		}
 		
 		// Sección de estadísticas
 		statsContainer.empty();
 		renderStats();
 		
 		// Event listener para toggle de vista
-		toggleButton.addEventListener('click', () => {
+		toggleButton.addEventListener('click', async () => {
 			isTableView = !isTableView;
+			blockConfig.viewMode = isTableView ? 'table' : 'grid';
+			await this.saveBlockConfig(ctx, blockConfig);
 			if (isTableView) {
 				cardsContainer.style.display = 'none';
 				tableContainer.style.display = 'block';
@@ -1002,10 +1039,11 @@ class AddGameModal extends Modal {
 			this.cover = existingGame.cover || '';
 			this.rating = existingGame.rating || 3;
 			this.completionDate = existingGame.completionDate || '';
-			this.platform = existingGame.platform || GamePlatform.PC;
+			this.platform = existingGame.platform || this.plugin.settings.defaultPlatform;
 			this.hours = existingGame.hours || 0;
 			this.platinum = existingGame.platinum || false;
 		} else {
+			this.platform = this.plugin.settings.defaultPlatform;
 			// Fecha actual por defecto
 			const today = new Date();
 			this.completionDate = today.toISOString().split('T')[0];
@@ -1321,6 +1359,32 @@ class GameBacklogSettingTab extends PluginSettingTab {
 					this.plugin.settings.defaultCoverImage = value;
 					await this.plugin.saveSettings();
 				}));
+
+		new Setting(containerEl)
+			.setName(this.plugin.t('settingsDefaultPlatformName'))
+			.setDesc(this.plugin.t('settingsDefaultPlatformDesc'))
+			.addDropdown(dropdown => {
+				const selectEl = dropdown.selectEl;
+
+				PLATFORM_GROUPS.forEach((group) => {
+					const groupHeader = document.createElement('option');
+					groupHeader.textContent = `--- ${group.label} ---`;
+					groupHeader.disabled = true;
+					groupHeader.value = '';
+					selectEl.appendChild(groupHeader);
+
+					group.platforms.forEach((platform) => {
+						dropdown.addOption(platform, platform);
+					});
+				});
+
+				dropdown
+					.setValue(this.plugin.settings.defaultPlatform)
+					.onChange(async (value) => {
+						this.plugin.settings.defaultPlatform = value as GamePlatform;
+						await this.plugin.saveSettings();
+					});
+			});
 
 		new Setting(containerEl)
 			.setName(this.plugin.t('settingsPlatformModeName'))

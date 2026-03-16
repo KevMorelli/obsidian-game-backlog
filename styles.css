@@ -609,6 +609,7 @@
 .game-backlog-table-view {
 	display: none;
 	overflow-x: auto;
+	text-align: left;
 }
 
 .game-backlog-table {
@@ -649,6 +650,28 @@
 	padding: 12px 15px;
 	font-size: 13px;
 	color: var(--text-normal);
+	text-align: start;
+}
+
+.game-table-name-cell {
+	text-align: start !important;
+}
+
+.game-table-name-content {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.game-table-platinum-icon {
+	width: 1.2em;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.game-table-platinum-icon.is-empty {
+	visibility: hidden;
 }
 
 .game-backlog-table tbody tr:last-child {
