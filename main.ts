@@ -146,6 +146,7 @@ const DEFAULT_SETTINGS: GameBacklogSettings = {
 
 export default class GameBacklogPlugin extends Plugin {
 	settings: GameBacklogSettings;
+	private static readonly REPO_ASSETS_API_URL = 'https://api.github.com/repos/KevMorelli/obsidian-game-backlog/contents/assets';
 
 	t(key: I18nKey, vars?: Record<string, string | number>): string {
 		return translate(this.settings.language, key, vars);
@@ -214,6 +215,95 @@ export default class GameBacklogPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	private async ensureAdapterFolder(path: string): Promise<void> {
+		const adapter = this.app.vault.adapter as unknown as {
+			exists?: (path: string) => Promise<boolean>;
+			mkdir?: (path: string) => Promise<void>;
+		};
+
+		if (!path || typeof adapter.mkdir !== 'function') return;
+
+		const parts = path.split('/').filter(Boolean);
+		let currentPath = '';
+
+		for (const part of parts) {
+			currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+			if (typeof adapter.exists === 'function') {
+				const exists = await adapter.exists(currentPath);
+				if (exists) continue;
+			}
+
+			try {
+				await adapter.mkdir(currentPath);
+			} catch (error) {
+				const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+				if (!message.includes('exist')) {
+					throw error;
+				}
+			}
+		}
+	}
+
+	async downloadPluginAssetsFromRepo(): Promise<void> {
+		const pluginAssetsFolder = `${this.app.vault.configDir}/plugins/${this.manifest.id}/assets`;
+		const adapter = this.app.vault.adapter as unknown as {
+			writeBinary?: (path: string, data: ArrayBuffer) => Promise<void>;
+		};
+
+		if (typeof adapter.writeBinary !== 'function') {
+			new Notice(this.t('noticeAssetsSyncUnsupported'));
+			return;
+		}
+
+		new Notice(this.t('noticeAssetsSyncStarted'));
+
+		try {
+			await this.ensureAdapterFolder(pluginAssetsFolder);
+
+			const listingResponse = await requestUrl({
+				url: GameBacklogPlugin.REPO_ASSETS_API_URL,
+				method: 'GET',
+				headers: {
+					Accept: 'application/vnd.github+json',
+					'User-Agent': 'obsidian-game-backlog-plugin'
+				}
+			});
+
+			const assets = JSON.parse(listingResponse.text) as Array<{
+				type: string;
+				name: string;
+				download_url: string | null;
+			}>;
+
+			const files = assets.filter((asset) => asset.type === 'file' && typeof asset.download_url === 'string');
+			if (!files.length) {
+				new Notice(this.t('noticeAssetsSyncNoFiles'));
+				return;
+			}
+
+			let downloadedCount = 0;
+			for (const file of files) {
+				const fileResponse = await requestUrl({
+					url: file.download_url as string,
+					method: 'GET',
+					headers: {
+						'User-Agent': 'obsidian-game-backlog-plugin'
+					}
+				});
+
+				await adapter.writeBinary(`${pluginAssetsFolder}/${file.name}`, fileResponse.arrayBuffer);
+				downloadedCount += 1;
+			}
+
+			new Notice(this.t('noticeAssetsSyncSuccess', { count: downloadedCount }));
+		} catch (error) {
+			console.error('[game-backlog] Assets sync error:', error);
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			new Notice(this.t('noticeAssetsSyncError', { error: errorMsg }));
+		}
 	}
 
 	parseGameEntries(source: string): GameEntry[] {
@@ -1409,6 +1499,25 @@ class GameBacklogSettingTab extends PluginSettingTab {
 					this.plugin.settings.imageDownloadFolder = value;
 					await this.plugin.saveSettings();
 				}));
+
+		new Setting(containerEl)
+			.setName(this.plugin.t('settingsPluginAssetsName'))
+			.setDesc(this.plugin.t('settingsPluginAssetsDesc'))
+			.addButton((button) => {
+				button
+					.setButtonText(this.plugin.t('settingsPluginAssetsButton'))
+					.onClick(async () => {
+						button.setDisabled(true);
+						button.setButtonText(this.plugin.t('settingsPluginAssetsRunning'));
+
+						try {
+							await this.plugin.downloadPluginAssetsFromRepo();
+						} finally {
+							button.setDisabled(false);
+							button.setButtonText(this.plugin.t('settingsPluginAssetsButton'));
+						}
+					});
+			});
 	}
 }
 

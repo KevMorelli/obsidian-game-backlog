@@ -1,10 +1,10 @@
 {
-	"id": "game-backlog",
-	"name": "Game Backlog",
+	"id": "game-backlog-tracker",
+	"name": "Game Backlog Tracker",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Plugin para renderizar tu backlog de videojuegos completados en una grilla visual de tarjetas",
-	"author": "Kev",
-	"authorUrl": "",
+	"description": "A plugin for Obsidian to track completed games from your game backlog",
+	"author": "Kevin Morelli",
+	"authorUrl": "https://github.com/KevMorelli",
 	"isDesktopOnly": false
 }

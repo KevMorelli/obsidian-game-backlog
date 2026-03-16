@@ -74,7 +74,16 @@ const translations = {
 		platformModeLabel: 'Label',
 		settingsDownloadFolderName: 'Carpeta de descarga de imagenes',
 		settingsDownloadFolderDesc: 'Carpeta en el vault donde se descargaran las imagenes remotas. Si esta vacia, se usara la carpeta del archivo',
-		settingsDownloadFolderPlaceholder: 'attachments'
+		settingsDownloadFolderPlaceholder: 'attachments',
+		settingsPluginAssetsName: 'Assets del plugin',
+		settingsPluginAssetsDesc: 'Crea la carpeta assets del plugin y descarga todos los archivos del repositorio oficial',
+		settingsPluginAssetsButton: 'Descargar assets oficiales',
+		settingsPluginAssetsRunning: 'Descargando...',
+		noticeAssetsSyncUnsupported: 'Tu adaptador de vault no permite escribir archivos binarios.',
+		noticeAssetsSyncStarted: 'Descargando assets del plugin...',
+		noticeAssetsSyncNoFiles: 'No se encontraron archivos para descargar.',
+		noticeAssetsSyncSuccess: 'Assets descargados correctamente: {count}',
+		noticeAssetsSyncError: 'Error al descargar assets: {error}'
 	},
 	en: {
 		commandInsertBlock: 'Insert game-backlog block',
@@ -149,7 +158,16 @@ const translations = {
 		platformModeLabel: 'Label',
 		settingsDownloadFolderName: 'Image download folder',
 		settingsDownloadFolderDesc: 'Vault folder where remote images will be downloaded. If empty, the current markdown file folder is used',
-		settingsDownloadFolderPlaceholder: 'attachments'
+		settingsDownloadFolderPlaceholder: 'attachments',
+		settingsPluginAssetsName: 'Plugin assets',
+		settingsPluginAssetsDesc: 'Create the plugin assets folder and download all files from the official repository',
+		settingsPluginAssetsButton: 'Download official assets',
+		settingsPluginAssetsRunning: 'Downloading...',
+		noticeAssetsSyncUnsupported: 'Your vault adapter does not support binary file writes.',
+		noticeAssetsSyncStarted: 'Downloading plugin assets...',
+		noticeAssetsSyncNoFiles: 'No files were found to download.',
+		noticeAssetsSyncSuccess: 'Assets downloaded successfully: {count}',
+		noticeAssetsSyncError: 'Error downloading assets: {error}'
 	}
 } as const;
 
