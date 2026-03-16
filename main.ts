@@ -338,7 +338,7 @@ export default class GameBacklogPlugin extends Plugin {
 			[GamePlatform.MAME]: 'MAME.png',
 			[GamePlatform.DOS]: 'DOS.png',
 			[GamePlatform.NEO_GEO]: 'Neo Geo.png',
-			[GamePlatform.SEGA_SATURN]: 'Sega Saturn.png',
+			[GamePlatform.SEGA_SATURN]: 'Saturn.png',
 			[GamePlatform.ATARI_2600]: 'Atari 2600.png'
 		};
 		return logoMap[platform] || '';
