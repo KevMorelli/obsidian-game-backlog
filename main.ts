@@ -186,8 +186,7 @@ export default class GameBacklogPlugin extends Plugin {
 		this.registerMarkdownCodeBlockProcessor('game-backlog', (source, el, ctx) => {
 			try {
 				this.renderGameBacklog(source, el, ctx);
-			} catch (error) {
-				console.error('[game-backlog] Render error:', error);
+			} catch {
 				el.createDiv({ text: this.t('renderError') });
 			}
 		});
@@ -300,7 +299,6 @@ export default class GameBacklogPlugin extends Plugin {
 
 			new Notice(this.t('noticeAssetsSyncSuccess', { count: downloadedCount }));
 		} catch (error) {
-			console.error('[game-backlog] Assets sync error:', error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			new Notice(this.t('noticeAssetsSyncError', { error: errorMsg }));
 		}
@@ -393,21 +391,20 @@ export default class GameBacklogPlugin extends Plugin {
 
 	parsePlatform(value: string): GamePlatform {
 		const trimmed = value.trim();
-		const platforms = Object.values(GamePlatform);
+		const platforms = Object.values(GamePlatform) as string[];
 		const fallbackPlatform = this.settings.defaultPlatform || DEFAULT_SETTINGS.defaultPlatform;
 
 		if (!trimmed) {
 			return fallbackPlatform;
 		}
 
-		const exactMatch = platforms.find((platform) => platform === trimmed);
-		if (exactMatch) {
-			return exactMatch;
+		if (platforms.includes(trimmed)) {
+			return trimmed as GamePlatform;
 		}
 
 		const normalized = trimmed.toLowerCase();
 		const caseInsensitiveMatch = platforms.find((platform) => platform.toLowerCase() === normalized);
-		return caseInsensitiveMatch || fallbackPlatform;
+		return caseInsensitiveMatch ? (caseInsensitiveMatch as GamePlatform) : fallbackPlatform;
 	}
 
 	getPlatformLogo(platform: GamePlatform): string {
@@ -484,52 +481,19 @@ export default class GameBacklogPlugin extends Plugin {
 					}
 				});
 				arrayBuffer = response.arrayBuffer;
-			} catch (e) {
-				console.warn('[game-backlog] requestUrl failed, trying fetch...');
+			} catch {
 			}
 
-			// Estrategia 2: Fetch con User-Agent (simula navegador real)
+			// Estrategia 2: segundo intento con requestUrl sin cabeceras personalizadas
 			try {
 				if (!arrayBuffer) {
-					const response = await fetch(url, {
-						headers: {
-							'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-						}
+					const fallbackResponse = await requestUrl({
+						url,
+						method: 'GET'
 					});
-					if (response.ok) {
-						arrayBuffer = await response.arrayBuffer();
-					}
+					arrayBuffer = fallbackResponse.arrayBuffer;
 				}
-			} catch (e) {
-				console.warn('[game-backlog] Fetch with User-Agent failed, trying alternative method...');
-			}
-
-			// Estrategia 3: Intentar con Node.js nativo si está disponible (Electron)
-			if (!arrayBuffer) {
-				try {
-					const https = await import('https');
-					const http = await import('http');
-
-					arrayBuffer = await new Promise((resolve, reject) => {
-						const protocolModule = url.startsWith('https') ? https : http;
-						(protocolModule as any).get(url, {
-							headers: {
-								'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-							}
-						}, (res: any) => {
-							const chunks: Buffer[] = [];
-							res.on('data', (chunk: any) => chunks.push(Buffer.from(chunk)));
-							res.on('end', () => {
-								const merged = Buffer.concat(chunks);
-								const exact = merged.buffer.slice(merged.byteOffset, merged.byteOffset + merged.byteLength);
-								resolve(exact);
-							});
-							res.on('error', reject);
-						}).on('error', reject);
-					});
-				} catch (e) {
-					console.warn('[game-backlog] Node.js method not available or failed');
-				}
+			} catch {
 			}
 
 			if (!arrayBuffer) {
@@ -547,7 +511,6 @@ export default class GameBacklogPlugin extends Plugin {
 			// Retornar referencia obsidian
 			return filePath;
 		} catch (error) {
-			console.error('[game-backlog] Download error:', error);
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			new Notice(this.t('downloadErrorPrefix', { error: errorMsg }));
 			return url;
@@ -558,6 +521,17 @@ export default class GameBacklogPlugin extends Plugin {
 		if (!fileName) return '';
 
 		const assetPath = `${this.app.vault.configDir}/plugins/${this.manifest.id}/assets/${fileName}`;
+		const runtimeAsset = this.app.vault.getAbstractFileByPath(assetPath);
+		if (runtimeAsset instanceof TFile) {
+			return this.app.vault.getResourcePath(runtimeAsset);
+		}
+
+		const localAssetPath = `assets/${fileName}`;
+		const localAsset = this.app.vault.getAbstractFileByPath(localAssetPath);
+		if (localAsset instanceof TFile) {
+			return this.app.vault.getResourcePath(localAsset);
+		}
+
 		const adapter = this.app.vault.adapter as unknown as { getResourcePath?: (path: string) => string };
 
 		if (typeof adapter.getResourcePath === 'function') {
@@ -567,16 +541,22 @@ export default class GameBacklogPlugin extends Plugin {
 		return assetPath;
 	}
 
+	getPluginAssetFallbackUrl(fileName: string): string {
+		if (!fileName) return '';
+		return `https://raw.githubusercontent.com/KevMorelli/obsidian-game-backlog/main/assets/${encodeURIComponent(fileName)}`;
+	}
+
 	resolveImageSource(rawPath: string, sourcePath: string = ''): string {
 		if (!rawPath) return '';
+		const configDirPrefix = `${this.app.vault.configDir}/`;
 
 		// Si es una URL o data URI, retornar directamente
 		if (/^(https?:\/\/|data:|app:|blob:)/i.test(rawPath)) {
 			return rawPath;
 		}
 
-		// Si comienza con .obsidian/, es relativo al vault root
-		if (rawPath.startsWith('.obsidian/')) {
+		// Si comienza con la carpeta de configuración del vault, es relativo al vault root
+		if (rawPath.startsWith(configDirPrefix)) {
 			const file = this.app.vault.getAbstractFileByPath(rawPath);
 			if (file instanceof TFile) {
 				return this.app.vault.getResourcePath(file);
@@ -645,7 +625,7 @@ export default class GameBacklogPlugin extends Plugin {
 
 		const configSection = `isLocked: ${config.isLocked}\nviewMode: ${config.viewMode}\ntopGame1: ${config.topGame1}\ntopGame2: ${config.topGame2}\ntopGame3: ${config.topGame3}\n`;
 		const newBlock = configSection + entriesPart;
-		const newContent = content.replace(codeBlockRegex, '\`\`\`game-backlog\n' + newBlock + '\`\`\`');
+		const newContent = content.replace(codeBlockRegex, '```game-backlog\n' + newBlock + '```');
 		await this.app.vault.modify(file, newContent);
 	}
 
@@ -670,18 +650,20 @@ export default class GameBacklogPlugin extends Plugin {
 		const lockButton = controlsContainer.createEl('button', { cls: 'game-lock-toggle' });
 		lockButton.textContent = blockConfig.isLocked ? '🔒' : '🔓';
 		lockButton.title = blockConfig.isLocked ? this.t('lockTitleLocked') : this.t('lockTitleUnlocked');
-		lockButton.addEventListener('click', async () => {
-			blockConfig.isLocked = !blockConfig.isLocked;
-			await this.saveBlockConfig(ctx, blockConfig);
-			lockButton.textContent = blockConfig.isLocked ? '🔒' : '🔓';
-			lockButton.title = blockConfig.isLocked ? this.t('lockTitleLocked') : this.t('lockTitleUnlocked');
-			if (isTableView) {
-				renderTable();
-			} else {
-				renderCards();
-			}
-			statsContainer.empty();
-			renderStats();
+		lockButton.addEventListener('click', () => {
+			void (async () => {
+				blockConfig.isLocked = !blockConfig.isLocked;
+				await this.saveBlockConfig(ctx, blockConfig);
+				lockButton.textContent = blockConfig.isLocked ? '🔒' : '🔓';
+				lockButton.title = blockConfig.isLocked ? this.t('lockTitleLocked') : this.t('lockTitleUnlocked');
+				if (isTableView) {
+					renderTable();
+				} else {
+					renderCards();
+				}
+				statsContainer.empty();
+				renderStats();
+			})();
 		});
 		
 		// Contenedor para vista de tarjetas
@@ -689,7 +671,10 @@ export default class GameBacklogPlugin extends Plugin {
 		
 		// Contenedor para vista de tabla
 		const tableContainer = container.createDiv({ cls: 'game-backlog-table-view' });
-		tableContainer.style.display = 'none';
+
+		const setContainerVisibility = (target: HTMLElement, visible: boolean): void => {
+			target.classList.toggle('game-backlog-hidden', !visible);
+		};
 		
 		// Sección de estadísticas
 		const statsContainer = container.createDiv({ cls: 'game-stats-container' });
@@ -751,15 +736,26 @@ export default class GameBacklogPlugin extends Plugin {
 			}
 
 			if (game.platinum) {
+				const platinumLocalSource = this.getPluginAssetUrl('Platinum.png');
+				const platinumFallbackSource = this.getPluginAssetFallbackUrl('Platinum.png');
+				const initialPlatinumSource = platinumLocalSource || platinumFallbackSource;
+				let triedPlatinumFallback = !platinumLocalSource;
+
 				const platinumBadge = coverContainer.createEl('img', {
 					cls: 'game-platinum-badge',
 					attr: {
-						src: this.getPluginAssetUrl('Platinum.png'),
+						src: initialPlatinumSource,
 						alt: this.t('platinumBadgeAlt')
 					}
 				});
 
 				platinumBadge.onerror = () => {
+					if (!triedPlatinumFallback && platinumFallbackSource) {
+						triedPlatinumFallback = true;
+						platinumBadge.src = platinumFallbackSource;
+						return;
+					}
+
 					platinumBadge.remove();
 				};
 			}
@@ -767,17 +763,27 @@ export default class GameBacklogPlugin extends Plugin {
 			// Visualización de plataforma por modo global
 			if (this.settings.platformMode === 'image') {
 				const brandContainer = card.createDiv({ cls: 'game-brand-logo' });
-				const brandImageSource = this.getPluginAssetUrl(this.getPlatformLogo(game.platform));
-				if (brandImageSource) {
+				const platformLogo = this.getPlatformLogo(game.platform);
+				const brandImageSource = this.getPluginAssetUrl(platformLogo);
+				const brandFallbackSource = this.getPluginAssetFallbackUrl(platformLogo);
+				const initialBrandSource = brandImageSource || brandFallbackSource;
+				let triedBrandFallback = !brandImageSource;
+				if (initialBrandSource) {
 					const brandImage = brandContainer.createEl('img', {
 						cls: 'game-brand-image',
 						attr: {
-							src: brandImageSource,
+							src: initialBrandSource,
 							alt: game.platform || this.t('platformBrandAlt')
 						}
 					});
 
 					brandImage.onerror = () => {
+						if (!triedBrandFallback && brandFallbackSource) {
+							triedBrandFallback = true;
+							brandImage.src = brandFallbackSource;
+							return;
+						}
+
 						brandImage.remove();
 					};
 				}
@@ -819,10 +825,9 @@ export default class GameBacklogPlugin extends Plugin {
 			card.addEventListener('click', (e) => {
 				e.stopPropagation();
 				new GameViewModal(this.app, game, (editedGame) => {
-					this.editGameInFile(ctx, game, editedGame);
+					void this.editGameInFile(ctx, game, editedGame);
 				}, !blockConfig.isLocked, this).open();
 			});
-			card.style.cursor = 'pointer';
 			
 		});
 
@@ -832,7 +837,7 @@ export default class GameBacklogPlugin extends Plugin {
 				addCard.createSpan({ cls: 'game-card-add-icon', text: '+' });
 				addCard.addEventListener('click', () => {
 					new AddGameModal(this.app, (newGame) => {
-						this.addGameToFile(ctx, newGame);
+						void this.addGameToFile(ctx, newGame);
 					}, this).open();
 				});
 			}
@@ -854,7 +859,7 @@ export default class GameBacklogPlugin extends Plugin {
 			const tbody = table.createEl('tbody');
 			games.forEach(game => {
 				const row = tbody.createEl('tr');
-				row.style.cursor = 'pointer';
+				row.addClass('game-clickable-row');
 				
 				// Juego
 				const nameCell = row.createEl('td');
@@ -909,10 +914,9 @@ export default class GameBacklogPlugin extends Plugin {
 				// Click handler para abrir modal (siempre disponible)
 				row.addEventListener('click', () => {
 					new GameViewModal(this.app, game, (editedGame) => {
-						this.editGameInFile(ctx, game, editedGame);
+						void this.editGameInFile(ctx, game, editedGame);
 					}, !blockConfig.isLocked, this).open();
 				});
-				row.style.cursor = 'pointer';
 			});
 			
 			// Fila de agregar (solo si desbloqueado)
@@ -922,7 +926,7 @@ export default class GameBacklogPlugin extends Plugin {
 				addCell.textContent = '+';
 				addRow.addEventListener('click', () => {
 					new AddGameModal(this.app, (newGame) => {
-						this.addGameToFile(ctx, newGame);
+						void this.addGameToFile(ctx, newGame);
 					}, this).open();
 				});
 			}
@@ -976,10 +980,12 @@ export default class GameBacklogPlugin extends Plugin {
 					
 					select.value = currentValue || '';
 					
-					select.addEventListener('change', async (e: Event) => {
-						const newValue = (e.target as HTMLSelectElement).value;
-						blockConfig[settingKey] = newValue;
-						await this.saveBlockConfig(ctx, blockConfig);
+					select.addEventListener('change', (e: Event) => {
+						void (async () => {
+							const newValue = (e.target as HTMLSelectElement).value;
+							blockConfig[settingKey] = newValue;
+							await this.saveBlockConfig(ctx, blockConfig);
+						})();
 					});
 				}
 			});
@@ -987,12 +993,12 @@ export default class GameBacklogPlugin extends Plugin {
 		
 		// Renderizar inicial segun estado guardado en el bloque
 		if (isTableView) {
-			cardsContainer.style.display = 'none';
-			tableContainer.style.display = 'block';
+			setContainerVisibility(cardsContainer, false);
+			setContainerVisibility(tableContainer, true);
 			renderTable();
 		} else {
-			cardsContainer.style.display = 'block';
-			tableContainer.style.display = 'none';
+			setContainerVisibility(cardsContainer, true);
+			setContainerVisibility(tableContainer, false);
 			renderCards();
 		}
 		
@@ -1001,20 +1007,22 @@ export default class GameBacklogPlugin extends Plugin {
 		renderStats();
 		
 		// Event listener para toggle de vista
-		toggleButton.addEventListener('click', async () => {
-			isTableView = !isTableView;
-			blockConfig.viewMode = isTableView ? 'table' : 'grid';
-			await this.saveBlockConfig(ctx, blockConfig);
-			if (isTableView) {
-				cardsContainer.style.display = 'none';
-				tableContainer.style.display = 'block';
-				toggleButton.textContent = '🃏';
-				renderTable();
-			} else {
-				cardsContainer.style.display = 'block';
-				tableContainer.style.display = 'none';
-				toggleButton.textContent = '📊';
-			}
+		toggleButton.addEventListener('click', () => {
+			void (async () => {
+				isTableView = !isTableView;
+				blockConfig.viewMode = isTableView ? 'table' : 'grid';
+				await this.saveBlockConfig(ctx, blockConfig);
+				if (isTableView) {
+					setContainerVisibility(cardsContainer, false);
+					setContainerVisibility(tableContainer, true);
+					toggleButton.textContent = '🃏';
+					renderTable();
+				} else {
+					setContainerVisibility(cardsContainer, true);
+					setContainerVisibility(tableContainer, false);
+					toggleButton.textContent = '📊';
+				}
+			})();
 		});
 		
 	}
@@ -1218,7 +1226,7 @@ class AddGameModal extends Modal {
 			.setName(this.plugin.t('modalCompletionDateLabel'))
 			.setDesc(this.plugin.t('modalCompletionDateDesc'))
 			.addText(text => text
-				.setPlaceholder('YYYY-MM-DD')
+				.setPlaceholder('Completion date')
 				.setValue(this.completionDate)
 				.onChange(value => {
 					this.completionDate = value;
@@ -1424,7 +1432,9 @@ class GameBacklogSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: this.plugin.t('settingsTitle') });
+		new Setting(containerEl)
+			.setName(this.plugin.t('settingsTitle'))
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName(this.plugin.t('settingsLanguageName'))

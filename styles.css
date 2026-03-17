@@ -607,9 +607,12 @@
 
 /* Vista de tabla */
 .game-backlog-table-view {
-	display: none;
 	overflow-x: auto;
 	text-align: left;
+}
+
+.game-backlog-hidden {
+	display: none !important;
 }
 
 .game-backlog-table {
@@ -676,6 +679,10 @@
 
 .game-backlog-table tbody tr:last-child {
 	border-bottom: none;
+}
+
+.game-clickable-row {
+	cursor: pointer;
 }
 
 
