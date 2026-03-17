@@ -470,6 +470,8 @@ export default class GameBacklogPlugin extends Plugin {
 
 			// Intentar descargar con múltiples estrategias
 			let arrayBuffer: ArrayBuffer | null = null;
+			let firstAttemptError: string | null = null;
+			let secondAttemptError: string | null = null;
 
 			// Estrategia 1: requestUrl (Obsidian desktop request, evita problemas típicos de CORS)
 			try {
@@ -481,7 +483,8 @@ export default class GameBacklogPlugin extends Plugin {
 					}
 				});
 				arrayBuffer = response.arrayBuffer;
-			} catch {
+			} catch (error) {
+				firstAttemptError = error instanceof Error ? error.message : String(error);
 			}
 
 			// Estrategia 2: segundo intento con requestUrl sin cabeceras personalizadas
@@ -493,11 +496,20 @@ export default class GameBacklogPlugin extends Plugin {
 					});
 					arrayBuffer = fallbackResponse.arrayBuffer;
 				}
-			} catch {
+			} catch (error) {
+				secondAttemptError = error instanceof Error ? error.message : String(error);
 			}
 
 			if (!arrayBuffer) {
-				throw new Error(this.t('downloadErrorUnavailable'));
+				const attemptDetails = [firstAttemptError, secondAttemptError]
+					.filter((detail): detail is string => Boolean(detail && detail.trim()))
+					.join(' | ');
+
+				throw new Error(
+					attemptDetails
+						? `${this.t('downloadErrorUnavailable')} (${attemptDetails})`
+						: this.t('downloadErrorUnavailable')
+				);
 			}
 
 			// Guardar archivo, sobrescribiendo si existe
