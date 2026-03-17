@@ -1,7 +1,7 @@
 {
 	"id": "game-backlog-tracker",
 	"name": "Game Backlog Tracker",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
 	"description": "Track completed games from your game backlog.",
 	"author": "Kevin Morelli",
