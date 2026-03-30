@@ -4,7 +4,7 @@ A plugin for Obsidian to track completed games from your game backlog.
 The main focus of this plugin is to track yearly completions and simplify the process of adding new entries.
 
 ## ❓ How to use it
-On a MD file press `Control + P` and search for `Game Backlog: Inser game-backlog block`.
+On a MD file press `Control + P` and search for `Game Backlog: Insert game-backlog block`.
 This will create a specific block that this widget uses.
 From here you can just use the interactive interface to add new entries.
 
@@ -19,6 +19,7 @@ From here you can just use the interactive interface to add new entries.
 - Responsive design
 - English/spanish language
 - Fully customizable
+- Customizable themes
 
 ## ❗ Assets
 
@@ -44,10 +45,8 @@ MIT
 
 ## 🔧 Future features
 
-- Remove games without the need of manually edit the block
 - Support for SteamGridDB
 - Support for DLC campaigns
-- Customizable themes
 - Better mobile support
 
 ## 🤝 Contributions

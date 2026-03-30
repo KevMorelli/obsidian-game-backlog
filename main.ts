@@ -134,6 +134,10 @@ interface GameBacklogSettings {
 	defaultPlatform: GamePlatform;
 	platformMode: PlatformMode;
 	imageDownloadFolder: string;
+	cardColor: string;
+	textColor: string;
+	noImageBackgroundColor: string;
+	noImageTextColor: string;
 }
 
 const DEFAULT_SETTINGS: GameBacklogSettings = {
@@ -141,7 +145,11 @@ const DEFAULT_SETTINGS: GameBacklogSettings = {
 	defaultCoverImage: '',
 	defaultPlatform: GamePlatform.PC,
 	platformMode: 'image',
-	imageDownloadFolder: ''
+	imageDownloadFolder: '',
+	cardColor: '#35393d',
+	textColor: '',
+	noImageBackgroundColor: '',
+	noImageTextColor: ''
 }
 
 export default class GameBacklogPlugin extends Plugin {
@@ -590,14 +598,59 @@ export default class GameBacklogPlugin extends Plugin {
 		return '';
 	}
 
-	formatCompletionDate(rawDate: string): string {
+	private parseCompletionDate(rawDate: string): Date | null {
+		const dateOnlyMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+		if (dateOnlyMatch) {
+			const year = Number(dateOnlyMatch[1]);
+			const month = Number(dateOnlyMatch[2]);
+			const day = Number(dateOnlyMatch[3]);
+			const parsed = new Date(year, month - 1, day);
+
+			if (
+				parsed.getFullYear() === year
+				&& parsed.getMonth() === month - 1
+				&& parsed.getDate() === day
+			) {
+				return parsed;
+			}
+
+			return null;
+		}
+
 		const parsed = new Date(rawDate);
-		if (Number.isNaN(parsed.getTime())) return rawDate;
+		return Number.isNaN(parsed.getTime()) ? null : parsed;
+	}
+
+	private normalizeCssColor(rawValue: string): string {
+		const value = rawValue.trim();
+		if (!value) return '';
+		if (typeof CSS === 'undefined' || typeof CSS.supports !== 'function') {
+			return value;
+		}
+
+		return CSS.supports('color', value) ? value : '';
+	}
+
+	formatCompletionDate(rawDate: string): string {
+		const parsed = this.parseCompletionDate(rawDate);
+		if (!parsed) return rawDate;
 
 		const locale = this.getDateLocale();
 		return new Intl.DateTimeFormat(locale, {
 			day: 'numeric',
 			month: 'long'
+		}).format(parsed);
+	}
+
+	formatCompletionDateWithYear(rawDate: string): string {
+		const parsed = this.parseCompletionDate(rawDate);
+		if (!parsed) return rawDate;
+
+		const locale = this.getDateLocale();
+		return new Intl.DateTimeFormat(locale, {
+			day: 'numeric',
+			month: 'long',
+			year: 'numeric'
 		}).format(parsed);
 	}
 
@@ -704,9 +757,26 @@ export default class GameBacklogPlugin extends Plugin {
 			} else {
 				card = grid.createDiv({ cls: 'game-card' });
 			}
+
+			const cardColor = this.normalizeCssColor(this.settings.cardColor || '');
+			const textColor = this.normalizeCssColor(this.settings.textColor || '');
+			if (cardColor) {
+				card.style.setProperty('--game-card-bg', cardColor);
+			}
+			if (textColor) {
+				card.style.setProperty('--game-card-text', textColor);
+			}
 			
 			// Imagen de portada
 			const coverContainer = card.createDiv({ cls: 'game-cover-container' });
+			const noImageBackgroundColor = this.normalizeCssColor(this.settings.noImageBackgroundColor || '');
+			const noImageTextColor = this.normalizeCssColor(this.settings.noImageTextColor || '');
+			if (noImageBackgroundColor) {
+				coverContainer.style.setProperty('--game-no-image-bg', noImageBackgroundColor);
+			}
+			if (noImageTextColor) {
+				coverContainer.style.setProperty('--game-no-image-text', noImageTextColor);
+			}
 			const nameOverlay = coverContainer.createDiv({ cls: 'game-name-overlay' });
 			nameOverlay.textContent = game.name || this.t('noName');
 
@@ -838,6 +908,8 @@ export default class GameBacklogPlugin extends Plugin {
 				e.stopPropagation();
 				new GameViewModal(this.app, game, (editedGame) => {
 					void this.editGameInFile(ctx, game, editedGame);
+				}, () => {
+					void this.deleteGameInFile(ctx, game);
 				}, !blockConfig.isLocked, this).open();
 			});
 			
@@ -895,8 +967,8 @@ export default class GameBacklogPlugin extends Plugin {
 				// Fecha
 				const dateCell = row.createEl('td');
 				if (game.completionDate) {
-					const parsed = new Date(game.completionDate);
-					if (!Number.isNaN(parsed.getTime())) {
+					const parsed = this.parseCompletionDate(game.completionDate);
+					if (parsed) {
 						const day = String(parsed.getDate()).padStart(2, '0');
 						const month = String(parsed.getMonth() + 1).padStart(2, '0');
 						dateCell.textContent = `${day}/${month}`;
@@ -927,6 +999,8 @@ export default class GameBacklogPlugin extends Plugin {
 				row.addEventListener('click', () => {
 					new GameViewModal(this.app, game, (editedGame) => {
 						void this.editGameInFile(ctx, game, editedGame);
+					}, () => {
+						void this.deleteGameInFile(ctx, game);
 					}, !blockConfig.isLocked, this).open();
 				});
 			});
@@ -1121,6 +1195,63 @@ export default class GameBacklogPlugin extends Plugin {
 			new Notice(this.t('noticeGameUpdated'));
 		}
 	}
+
+	async deleteGameInFile(ctx: MarkdownPostProcessorContext, gameToDelete: GameEntry) {
+		const file = this.app.vault.getAbstractFileByPath(ctx.sourcePath);
+		if (!(file instanceof TFile)) return;
+
+		const content = await this.app.vault.read(file);
+
+		const codeBlockRegex = /```game-backlog\n([\s\S]*?)```/;
+		const match = content.match(codeBlockRegex);
+
+		if (match) {
+			const targetId = gameToDelete.id || '';
+			const originalBlock = match[1];
+			const entries = originalBlock.match(/---\s*\n[\s\S]*?(?=(?:\n---\s*\n)|$)/g) || [];
+
+			let entryIndex = -1;
+
+			if (targetId) {
+				entryIndex = entries.findIndex((entry) => {
+					const idMatch = entry.match(/^id:\s*(.+)$/im);
+					return (idMatch?.[1] || '').trim() === targetId;
+				});
+			}
+
+			if (entryIndex === -1) {
+				entryIndex = entries.findIndex((entry) => {
+					const nameMatch = entry.match(/^name:\s*(.*)$/im);
+					const coverMatch = entry.match(/^cover:\s*(.*)$/im);
+					const ratingMatch = entry.match(/^rating:\s*(.*)$/im);
+					const dateMatch = entry.match(/^date:\s*(.*)$/im);
+					const platformMatch = entry.match(/^platform:\s*(.*)$/im);
+					const hoursMatch = entry.match(/^hours:\s*(.*)$/im);
+					const platinumMatch = entry.match(/^platinum:\s*(.*)$/im);
+
+					return (nameMatch?.[1] || '').trim() === (gameToDelete.name || '').trim() &&
+						(coverMatch?.[1] || '').trim() === (gameToDelete.cover || '').trim() &&
+						(ratingMatch?.[1] || '').trim() === String(gameToDelete.rating ?? 0) &&
+						(dateMatch?.[1] || '').trim() === (gameToDelete.completionDate || '').trim() &&
+						(platformMatch?.[1] || '').trim() === String(gameToDelete.platform || '').trim() &&
+						(hoursMatch?.[1] || '').trim() === String(gameToDelete.hours ?? 0) &&
+						(platinumMatch?.[1] || '').trim().toLowerCase() === String(gameToDelete.platinum).toLowerCase();
+				});
+			}
+
+			if (entryIndex === -1) {
+				new Notice(this.t('noticeEntryNotFound'));
+				return;
+			}
+
+			const targetEntry = entries[entryIndex];
+			const updatedBlock = originalBlock.replace(targetEntry, '').replace(/\n{3,}/g, '\n\n');
+			const newContent = content.replace(codeBlockRegex, `\`\`\`game-backlog\n${updatedBlock}\`\`\``);
+
+			await this.app.vault.modify(file, newContent);
+			new Notice(this.t('noticeGameDeleted'));
+		}
+	}
 }
 
 class AddGameModal extends Modal {
@@ -1220,7 +1351,7 @@ class AddGameModal extends Modal {
 					}
 				}));
 		}
-		
+
 		// Rating
 		new Setting(contentEl)
 			.setName(this.plugin.t('modalRatingLabel'))
@@ -1334,13 +1465,15 @@ class AddGameModal extends Modal {
 class GameViewModal extends Modal {
 	game: GameEntry;
 	onEdit: (editedGame: GameEntry) => void;
+	onDelete: () => void;
 	canEdit: boolean;
 	plugin: GameBacklogPlugin;
 
-	constructor(app: App, game: GameEntry, onEdit: (editedGame: GameEntry) => void, canEdit: boolean = true, plugin?: GameBacklogPlugin) {
+	constructor(app: App, game: GameEntry, onEdit: (editedGame: GameEntry) => void, onDelete: () => void, canEdit: boolean = true, plugin?: GameBacklogPlugin) {
 		super(app);
 		this.game = game;
 		this.onEdit = onEdit;
+		this.onDelete = onDelete;
 		this.canEdit = canEdit;
 		this.plugin = plugin!;
 	}
@@ -1381,17 +1514,7 @@ class GameViewModal extends Modal {
 			const dateLabel = dateContainer.createSpan({ cls: 'game-view-label' });
 			dateLabel.textContent = this.plugin.t('viewCompletedLabel');
 			const dateValue = dateContainer.createSpan({ cls: 'game-view-value' });
-			const parsed = new Date(this.game.completionDate);
-			if (!Number.isNaN(parsed.getTime())) {
-				const locale = this.plugin.getDateLocale();
-				dateValue.textContent = new Intl.DateTimeFormat(locale, {
-					day: 'numeric',
-					month: 'long',
-					year: 'numeric'
-				}).format(parsed);
-			} else {
-				dateValue.textContent = this.game.completionDate;
-			}
+			dateValue.textContent = this.plugin.formatCompletionDateWithYear(this.game.completionDate);
 		}
 
 		// Horas
@@ -1421,6 +1544,19 @@ class GameViewModal extends Modal {
 				new AddGameModal(this.app, (editedGame) => {
 					this.onEdit(editedGame);
 				}, this.plugin, this.game).open();
+			});
+
+			const deleteButton = buttonContainer.createEl('button', {
+				cls: 'game-view-delete-button',
+				text: this.plugin.t('buttonDelete')
+			});
+			deleteButton.addEventListener('click', () => {
+				if (!window.confirm(this.plugin.t('confirmDeleteGame'))) {
+					return;
+				}
+
+				this.close();
+				this.onDelete();
 			});
 		}
 	}
@@ -1519,6 +1655,50 @@ class GameBacklogSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.imageDownloadFolder)
 				.onChange(async (value) => {
 					this.plugin.settings.imageDownloadFolder = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName(this.plugin.t('settingsCardColorName'))
+			.setDesc(this.plugin.t('settingsCardColorDesc'))
+			.addText(text => text
+				.setPlaceholder(this.plugin.t('settingsCardColorPlaceholder'))
+				.setValue(this.plugin.settings.cardColor)
+				.onChange(async (value) => {
+					this.plugin.settings.cardColor = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName(this.plugin.t('settingsTextColorName'))
+			.setDesc(this.plugin.t('settingsTextColorDesc'))
+			.addText(text => text
+				.setPlaceholder(this.plugin.t('settingsTextColorPlaceholder'))
+				.setValue(this.plugin.settings.textColor)
+				.onChange(async (value) => {
+					this.plugin.settings.textColor = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName(this.plugin.t('settingsNoImageBackgroundColorName'))
+			.setDesc(this.plugin.t('settingsNoImageBackgroundColorDesc'))
+			.addText(text => text
+				.setPlaceholder(this.plugin.t('settingsNoImageBackgroundColorPlaceholder'))
+				.setValue(this.plugin.settings.noImageBackgroundColor)
+				.onChange(async (value) => {
+					this.plugin.settings.noImageBackgroundColor = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName(this.plugin.t('settingsNoImageTextColorName'))
+			.setDesc(this.plugin.t('settingsNoImageTextColorDesc'))
+			.addText(text => text
+				.setPlaceholder(this.plugin.t('settingsNoImageTextColorPlaceholder'))
+				.setValue(this.plugin.settings.noImageTextColor)
+				.onChange(async (value) => {
+					this.plugin.settings.noImageTextColor = value;
 					await this.plugin.saveSettings();
 				}));
 

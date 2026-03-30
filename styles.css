@@ -15,7 +15,7 @@
 
 /* Tarjeta individual */
 .game-card {
-	background: var(--background-secondary);
+	background: var(--game-card-bg, #35393d);
 	border-radius: 12px;
 	overflow: hidden;
 	width: 188px;
@@ -194,28 +194,49 @@
 
 .game-name-overlay {
 	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: calc(100% - 16px);
+	padding: 6px 10px;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 700;
+	line-height: 1.2;
+	text-align: center;
+	color: #ffffff;
+	background: transparent;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+	overflow-wrap: anywhere;
+	white-space: normal;
+	opacity: 0;
+	transform: translate(-50%, -50%);
+	transition: opacity 0.2s ease, transform 0.2s ease;
+	pointer-events: none;
+	z-index: 12;
+}
+
+.game-cover-container.game-cover-no-image {
+	background: var(--game-no-image-bg, linear-gradient(135deg, var(--background-modifier-border), var(--background-secondary)));
+}
+
+.game-cover-container.game-cover-no-image .game-name-overlay,
+.game-name-overlay.game-name-overlay-static {
 	inset: 0;
+	left: 0;
+	width: auto;
+	max-width: none;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	text-align: center;
 	padding: 12px;
+	border-radius: 0;
 	font-size: 15px;
-	font-weight: 700;
 	line-height: 1.3;
-	color: #ffffff;
-	background: rgba(0, 0, 0, 0.58);
-	opacity: 0;
-	transition: opacity 0.2s ease;
-}
-
-.game-cover-container.game-cover-no-image {
-	background: linear-gradient(135deg, var(--background-modifier-border), var(--background-secondary));
-}
-
-.game-cover-container.game-cover-no-image .game-name-overlay,
-.game-name-overlay.game-name-overlay-static {
+	white-space: normal;
+	color: var(--game-no-image-text, #ffffff);
 	opacity: 1;
+	transform: none;
 	background: rgba(0, 0, 0, 0.42);
 }
 
@@ -265,17 +286,20 @@
 	opacity: 1;
 }
 
-.game-card:hover .game-name-overlay {
+.game-card:hover .game-cover-container:not(.game-cover-no-image) .game-name-overlay {
 	opacity: 1;
+	transform: translate(-50%, -50%);
 }
 
-.game-card:hover .game-cover {
+.game-card:hover .game-cover-container:not(.game-cover-no-image) .game-cover {
 	filter: brightness(0.6);
 }
 
 /* Información del juego */
 .game-info {
+	background: var(--game-card-bg, #35393d);
 	padding: 10px 12px;
+	color: var(--game-card-text, var(--text-normal));
 }
 
 /* Rating (estrellas) */
@@ -295,7 +319,8 @@
 }
 
 .star.empty {
-	color: var(--text-faint);
+	color: var(--game-card-text, var(--text-faint));
+	opacity: 0.45;
 }
 
 /* Detalles (fecha y plataforma) */
@@ -304,7 +329,7 @@
 	flex-direction: column;
 	gap: 3px;
 	font-size: 13px;
-	color: var(--text-muted);
+	color: var(--game-card-text, var(--text-muted));
 }
 
 .game-date,
@@ -437,6 +462,16 @@
 	transform: translateY(-1px);
 }
 
+.game-view-buttons .game-view-delete-button {
+	background: var(--text-error);
+	color: #ffffff;
+}
+
+.game-view-buttons .game-view-delete-button:hover {
+	background: var(--text-error);
+	filter: brightness(0.9);
+}
+
 /* Tarjeta de agregar */
 .game-card-add {
 	display: flex !important;
@@ -551,13 +586,13 @@
 
 /* Tema oscuro mejorado */
 .theme-dark .game-card {
-	background: var(--background-secondary-alt);
+	background: var(--game-card-bg, #35393d);
 	border: 1px solid var(--background-modifier-border);
 }
 
 /* Tema claro mejorado */
 .theme-light .game-card {
-	background: var(--background-primary);
+	background: var(--game-card-bg, #35393d);
 	border: 1px solid var(--background-modifier-border);
 }
 

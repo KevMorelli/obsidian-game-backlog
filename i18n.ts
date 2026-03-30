@@ -1,7 +1,6 @@
 export type AppLanguage = 'es' | 'en';
 
-const translations = {
-	es: {
+const esTranslations = {
 		commandInsertBlock: 'Insertar bloque game-backlog',
 		renderError: 'Error renderizando game-backlog. Revisa la consola de desarrollador.',
 		downloadErrorPrefix: 'Error descargando imagen: {error}',
@@ -34,6 +33,18 @@ const translations = {
 		modalCoverLabel: 'URL de la portada',
 		modalCoverDesc: 'Link a la imagen de la portada',
 		modalCoverPlaceholder: 'https://ejemplo.com/portada.jpg',
+		modalCardColorLabel: 'Color de la tarjeta',
+		modalCardColorDesc: 'Color de fondo para la parte inferior de la tarjeta',
+		modalCardColorPlaceholder: '#35393d',
+		modalTextColorLabel: 'Color del texto',
+		modalTextColorDesc: 'Color del texto en la parte inferior de la tarjeta',
+		modalTextColorPlaceholder: '#f9fafb',
+		modalNoImageBackgroundColorLabel: 'Color de fondo sin imagen',
+		modalNoImageBackgroundColorDesc: 'Color de fondo cuando el juego no tiene portada',
+		modalNoImageBackgroundColorPlaceholder: '#334155',
+		modalNoImageTextColorLabel: 'Color de texto sin imagen',
+		modalNoImageTextColorDesc: 'Color del titulo cuando el juego no tiene portada',
+		modalNoImageTextColorPlaceholder: '#ffffff',
 		modalDownloadTooltip: 'Descargar imagen remota a carpeta configurada',
 		noticeNoActiveFile: 'No hay archivo abierto',
 		noticeImageDownloaded: 'Imagen descargada exitosamente',
@@ -51,6 +62,9 @@ const translations = {
 		buttonAdd: 'Agregar',
 		buttonCancel: 'Cancelar',
 		buttonEdit: 'Editar',
+		buttonDelete: 'Eliminar',
+		confirmDeleteGame: 'Estas seguro de que quieres eliminar este juego?',
+		noticeGameDeleted: 'Juego eliminado',
 		viewRatingLabel: 'Puntuacion: ',
 		viewPlatformLabel: 'Plataforma: ',
 		viewCompletedLabel: 'Completado: ',
@@ -75,6 +89,18 @@ const translations = {
 		settingsDownloadFolderName: 'Carpeta de descarga de imagenes',
 		settingsDownloadFolderDesc: 'Carpeta en el vault donde se descargaran las imagenes remotas. Si esta vacia, se usara la carpeta del archivo',
 		settingsDownloadFolderPlaceholder: 'attachments',
+		settingsCardColorName: 'Color de la tarjeta',
+		settingsCardColorDesc: 'Color de fondo para la parte inferior de todas las tarjetas',
+		settingsCardColorPlaceholder: '#35393d',
+		settingsTextColorName: 'Color del texto',
+		settingsTextColorDesc: 'Color del texto en la parte inferior de todas las tarjetas',
+		settingsTextColorPlaceholder: '#f9fafb',
+		settingsNoImageBackgroundColorName: 'Color de fondo sin imagen',
+		settingsNoImageBackgroundColorDesc: 'Color de fondo cuando una tarjeta no tiene portada',
+		settingsNoImageBackgroundColorPlaceholder: '#334155',
+		settingsNoImageTextColorName: 'Color de texto sin imagen',
+		settingsNoImageTextColorDesc: 'Color del titulo cuando una tarjeta no tiene portada',
+		settingsNoImageTextColorPlaceholder: '#ffffff',
 		settingsPluginAssetsName: 'Assets del plugin',
 		settingsPluginAssetsDesc: 'Crea la carpeta assets del plugin y descarga todos los archivos del repositorio oficial',
 		settingsPluginAssetsButton: 'Descargar assets oficiales',
@@ -84,8 +110,12 @@ const translations = {
 		noticeAssetsSyncNoFiles: 'No se encontraron archivos para descargar.',
 		noticeAssetsSyncSuccess: 'Assets descargados correctamente: {count}',
 		noticeAssetsSyncError: 'Error al descargar assets: {error}'
-	},
-	en: {
+} as const;
+
+type TranslationTable = typeof esTranslations;
+type TranslationDictionary = { [K in keyof TranslationTable]: string };
+
+const enTranslations: TranslationDictionary = {
 		commandInsertBlock: 'Insert game-backlog block',
 		renderError: 'Error rendering game-backlog. Check the developer console.',
 		downloadErrorPrefix: 'Error downloading image: {error}',
@@ -118,6 +148,18 @@ const translations = {
 		modalCoverLabel: 'Cover URL',
 		modalCoverDesc: 'Link to the cover image',
 		modalCoverPlaceholder: 'https://example.com/cover.jpg',
+		modalCardColorLabel: 'Card color',
+		modalCardColorDesc: 'Background color for the lower part of the card',
+		modalCardColorPlaceholder: '#35393d',
+		modalTextColorLabel: 'Text color',
+		modalTextColorDesc: 'Text color for the lower part of the card',
+		modalTextColorPlaceholder: '#f9fafb',
+		modalNoImageBackgroundColorLabel: 'No image background color',
+		modalNoImageBackgroundColorDesc: 'Background color used when the game has no cover image',
+		modalNoImageBackgroundColorPlaceholder: '#334155',
+		modalNoImageTextColorLabel: 'No image text color',
+		modalNoImageTextColorDesc: 'Title color used when the game has no cover image',
+		modalNoImageTextColorPlaceholder: '#ffffff',
 		modalDownloadTooltip: 'Download remote image to configured folder',
 		noticeNoActiveFile: 'No active file',
 		noticeImageDownloaded: 'Image downloaded successfully',
@@ -135,6 +177,9 @@ const translations = {
 		buttonAdd: 'Add',
 		buttonCancel: 'Cancel',
 		buttonEdit: 'Edit',
+		buttonDelete: 'Delete',
+		confirmDeleteGame: 'Are you sure you want to delete this game?',
+		noticeGameDeleted: 'Game deleted',
 		viewRatingLabel: 'Rating: ',
 		viewPlatformLabel: 'Platform: ',
 		viewCompletedLabel: 'Completed: ',
@@ -159,6 +204,18 @@ const translations = {
 		settingsDownloadFolderName: 'Image download folder',
 		settingsDownloadFolderDesc: 'Vault folder where remote images will be downloaded. If empty, the current markdown file folder is used',
 		settingsDownloadFolderPlaceholder: 'attachments',
+		settingsCardColorName: 'Card color',
+		settingsCardColorDesc: 'Background color for the lower part of all cards',
+		settingsCardColorPlaceholder: '#35393d',
+		settingsTextColorName: 'Text color',
+		settingsTextColorDesc: 'Text color for the lower part of all cards',
+		settingsTextColorPlaceholder: '#f9fafb',
+		settingsNoImageBackgroundColorName: 'No image background color',
+		settingsNoImageBackgroundColorDesc: 'Background color used when a card has no cover image',
+		settingsNoImageBackgroundColorPlaceholder: '#334155',
+		settingsNoImageTextColorName: 'No image text color',
+		settingsNoImageTextColorDesc: 'Title color used when a card has no cover image',
+		settingsNoImageTextColorPlaceholder: '#ffffff',
 		settingsPluginAssetsName: 'Plugin assets',
 		settingsPluginAssetsDesc: 'Create the plugin assets folder and download all files from the official repository',
 		settingsPluginAssetsButton: 'Download official assets',
@@ -168,14 +225,18 @@ const translations = {
 		noticeAssetsSyncNoFiles: 'No files were found to download.',
 		noticeAssetsSyncSuccess: 'Assets downloaded successfully: {count}',
 		noticeAssetsSyncError: 'Error downloading assets: {error}'
-	}
-} as const;
+	};
 
-export type I18nKey = keyof typeof translations.es;
+const translations: Record<AppLanguage, TranslationDictionary> = {
+	es: esTranslations,
+	en: enTranslations
+};
+
+export type I18nKey = keyof TranslationTable;
 
 export function translate(language: AppLanguage, key: I18nKey, vars?: Record<string, string | number>): string {
-	const table = translations[language] ?? translations.es;
-	let text = table[key] ?? translations.es[key];
+	const table = translations[language] ?? esTranslations;
+	let text = table[key] ?? esTranslations[key];
 	if (!vars) return text;
 	return text.replace(/\{(\w+)\}/g, (_, varName: string) => String(vars[varName] ?? ''));
 }
