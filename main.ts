@@ -128,6 +128,19 @@ interface BlockConfig {
 
 type PlatformMode = 'none' | 'image' | 'label';
 
+interface SGDBGame {
+	id: number;
+	name: string;
+}
+
+interface SGDBGrid {
+	id: number;
+	url: string;
+	thumb: string;
+	width: number;
+	height: number;
+}
+
 interface GameBacklogSettings {
 	language: AppLanguage;
 	defaultCoverImage: string;
@@ -138,6 +151,7 @@ interface GameBacklogSettings {
 	textColor: string;
 	noImageBackgroundColor: string;
 	noImageTextColor: string;
+	steamGridDbApiKey: string;
 }
 
 const DEFAULT_SETTINGS: GameBacklogSettings = {
@@ -149,7 +163,8 @@ const DEFAULT_SETTINGS: GameBacklogSettings = {
 	cardColor: '#35393d',
 	textColor: '',
 	noImageBackgroundColor: '',
-	noImageTextColor: ''
+	noImageTextColor: '',
+	steamGridDbApiKey: ''
 }
 
 export default class GameBacklogPlugin extends Plugin {
@@ -310,6 +325,34 @@ export default class GameBacklogPlugin extends Plugin {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			new Notice(this.t('noticeAssetsSyncError', { error: errorMsg }));
 		}
+	}
+
+	async searchSteamGridDB(term: string): Promise<SGDBGame[]> {
+		const response = await requestUrl({
+			url: `https://www.steamgriddb.com/api/v2/search/autocomplete/${encodeURIComponent(term)}`,
+			method: 'GET',
+			headers: {
+				Authorization: `Bearer ${this.settings.steamGridDbApiKey}`,
+				'User-Agent': 'obsidian-game-backlog-plugin'
+			}
+		});
+		const data = JSON.parse(response.text) as { success: boolean; data: SGDBGame[] };
+		if (!data.success) return [];
+		return data.data || [];
+	}
+
+	async getSteamGridDBGrids(gameId: number): Promise<SGDBGrid[]> {
+		const response = await requestUrl({
+			url: `https://www.steamgriddb.com/api/v2/grids/game/${gameId}`,
+			method: 'GET',
+			headers: {
+				Authorization: `Bearer ${this.settings.steamGridDbApiKey}`,
+				'User-Agent': 'obsidian-game-backlog-plugin'
+			}
+		});
+		const data = JSON.parse(response.text) as { success: boolean; data: SGDBGrid[] };
+		if (!data.success) return [];
+		return data.data || [];
 	}
 
 	parseGameEntries(source: string): GameEntry[] {
@@ -1310,6 +1353,14 @@ class AddGameModal extends Modal {
 		
 		// Portada (URL)
 		let coverTextField: HTMLInputElement;
+		let downloadBtnEl: HTMLButtonElement | null = null;
+
+		const updateDownloadButtonVisibility = () => {
+			if (downloadBtnEl) {
+				downloadBtnEl.style.display = /^https?:\/\//.test(this.cover) ? '' : 'none';
+			}
+		};
+
 		const coverSetting = new Setting(contentEl);
 		coverSetting
 			.setName(this.plugin.t('modalCoverLabel'))
@@ -1320,35 +1371,51 @@ class AddGameModal extends Modal {
 					.setValue(this.cover)
 					.onChange(value => {
 						this.cover = value;
+						updateDownloadButtonVisibility();
 					});
+			})
+			.addButton(btn => {
+				downloadBtnEl = btn.buttonEl;
+				btn.setButtonText('⬇️')
+					.setTooltip(this.plugin.t('modalDownloadTooltip'))
+					.onClick(async () => {
+						const activeFile = this.app.workspace.getActiveFile();
+						if (!activeFile) {
+							new Notice(this.plugin.t('noticeNoActiveFile'));
+							return;
+						}
+
+						const downloadPath = await this.plugin.downloadRemoteImage(
+							this.cover,
+							this.plugin.settings.imageDownloadFolder || null,
+							activeFile
+						);
+
+						if (downloadPath !== this.cover) {
+							this.cover = downloadPath;
+							if (coverTextField) {
+								coverTextField.value = downloadPath;
+								coverTextField.dispatchEvent(new Event('input', { bubbles: true }));
+							}
+							new Notice(this.plugin.t('noticeImageDownloaded'));
+						}
+					});
+				btn.buttonEl.style.display = /^https?:\/\//.test(this.cover) ? '' : 'none';
 			});
 
-		// Botón de descarga de imagen remota
-		if (this.cover && /^https?:\/\//.test(this.cover)) {
+		if (this.plugin.settings.steamGridDbApiKey) {
 			coverSetting.addButton(btn => btn
-				.setButtonText('⬇️')
-				.setTooltip(this.plugin.t('modalDownloadTooltip'))
-				.onClick(async () => {
-					const activeFile = this.app.workspace.getActiveFile();
-					if (!activeFile) {
-						new Notice(this.plugin.t('noticeNoActiveFile'));
-						return;
-					}
-
-					const downloadPath = await this.plugin.downloadRemoteImage(
-						this.cover,
-						this.plugin.settings.imageDownloadFolder || null,
-						activeFile
-					);
-
-					if (downloadPath !== this.cover) {
-						this.cover = downloadPath;
+				.setButtonText('🔍')
+				.setTooltip(this.plugin.t('steamGridDbSearchTooltip'))
+				.onClick(() => {
+					new SteamGridDBSearchModal(this.app, this.plugin, this.name, (url) => {
+						this.cover = url;
 						if (coverTextField) {
-							coverTextField.value = downloadPath;
+							coverTextField.value = url;
 							coverTextField.dispatchEvent(new Event('input', { bubbles: true }));
 						}
-						new Notice(this.plugin.t('noticeImageDownloaded'));
-					}
+						updateDownloadButtonVisibility();
+					}).open();
 				}));
 		}
 
@@ -1567,6 +1634,158 @@ class GameViewModal extends Modal {
 	}
 }
 
+class SteamGridDBSearchModal extends Modal {
+	private plugin: GameBacklogPlugin;
+	private onSelect: (url: string) => void;
+	private searchQuery: string;
+	private games: SGDBGame[] = [];
+	private grids: SGDBGrid[] = [];
+	private selectedGame: SGDBGame | null = null;
+
+	constructor(app: App, plugin: GameBacklogPlugin, initialQuery: string, onSelect: (url: string) => void) {
+		super(app);
+		this.plugin = plugin;
+		this.searchQuery = initialQuery;
+		this.onSelect = onSelect;
+	}
+
+	onOpen() {
+		this.renderSearchView();
+		if (this.searchQuery) {
+			void this.executeSearch();
+		}
+	}
+
+	private renderSearchView(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.createEl('h2', { text: this.plugin.t('steamGridDbModalTitle') });
+
+		const searchRow = contentEl.createDiv({ cls: 'sgdb-search-row' });
+		const input = searchRow.createEl('input', { cls: 'sgdb-search-input' });
+		input.type = 'text';
+		input.value = this.searchQuery;
+		input.placeholder = this.plugin.t('steamGridDbSearchPlaceholder');
+		const searchBtn = searchRow.createEl('button', {
+			text: this.plugin.t('steamGridDbSearchAction'),
+			cls: 'mod-cta sgdb-search-btn'
+		});
+
+		const resultsContainer = contentEl.createDiv({ cls: 'sgdb-results' });
+
+		const runSearch = async () => {
+			this.searchQuery = input.value.trim();
+			if (!this.searchQuery) return;
+			resultsContainer.empty();
+			resultsContainer.createEl('p', { text: this.plugin.t('steamGridDbLoadingGames') });
+			try {
+				this.games = await this.plugin.searchSteamGridDB(this.searchQuery);
+				this.renderGamesList(resultsContainer);
+			} catch (error) {
+				resultsContainer.empty();
+				const errorMsg = error instanceof Error ? error.message : String(error);
+				resultsContainer.createEl('p', { text: this.plugin.t('steamGridDbSearchError', { error: errorMsg }) });
+			}
+		};
+
+		searchBtn.addEventListener('click', () => { void runSearch(); });
+		input.addEventListener('keydown', (e: KeyboardEvent) => {
+			if (e.key === 'Enter') { void runSearch(); }
+		});
+
+		if (this.games.length > 0) {
+			this.renderGamesList(resultsContainer);
+		}
+	}
+
+	private async executeSearch(): Promise<void> {
+		const resultsContainer = this.contentEl.querySelector('.sgdb-results') as HTMLElement | null;
+		if (!resultsContainer) return;
+		resultsContainer.empty();
+		resultsContainer.createEl('p', { text: this.plugin.t('steamGridDbLoadingGames') });
+		try {
+			this.games = await this.plugin.searchSteamGridDB(this.searchQuery);
+			this.renderGamesList(resultsContainer);
+		} catch (error) {
+			resultsContainer.empty();
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			resultsContainer.createEl('p', { text: this.plugin.t('steamGridDbSearchError', { error: errorMsg }) });
+		}
+	}
+
+	private renderGamesList(container: HTMLElement): void {
+		container.empty();
+		if (this.games.length === 0) {
+			container.createEl('p', { text: this.plugin.t('steamGridDbNoResults') });
+			return;
+		}
+		const list = container.createEl('ul', { cls: 'sgdb-games-list' });
+		this.games.forEach(game => {
+			const item = list.createEl('li', { text: game.name, cls: 'sgdb-game-item' });
+			item.addEventListener('click', () => {
+				this.selectedGame = game;
+				void this.loadGridsForGame(game);
+			});
+		});
+	}
+
+	private async loadGridsForGame(game: SGDBGame): Promise<void> {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.createEl('h2', { text: this.plugin.t('steamGridDbModalTitle') });
+		contentEl.createDiv({ cls: 'sgdb-subtitle', text: game.name });
+		const loadingEl = contentEl.createEl('p', { text: this.plugin.t('steamGridDbLoadingGrids') });
+		try {
+			this.grids = await this.plugin.getSteamGridDBGrids(game.id);
+			loadingEl.remove();
+			this.renderGridView();
+		} catch (error) {
+			loadingEl.remove();
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			contentEl.createEl('p', { text: this.plugin.t('steamGridDbSearchError', { error: errorMsg }) });
+			const backBtn = contentEl.createEl('button', { text: this.plugin.t('steamGridDbBackButton'), cls: 'sgdb-back-btn' });
+			backBtn.addEventListener('click', () => { this.renderSearchView(); });
+		}
+	}
+
+	private renderGridView(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.createEl('h2', { text: this.plugin.t('steamGridDbModalTitle') });
+
+		const backBtn = contentEl.createEl('button', {
+			text: this.plugin.t('steamGridDbBackButton'),
+			cls: 'sgdb-back-btn'
+		});
+		backBtn.addEventListener('click', () => { this.renderSearchView(); });
+
+		if (this.selectedGame) {
+			contentEl.createDiv({ cls: 'sgdb-subtitle', text: this.selectedGame.name });
+		}
+
+		if (this.grids.length === 0) {
+			contentEl.createEl('p', { text: this.plugin.t('steamGridDbNoGrids') });
+			return;
+		}
+
+		const grid = contentEl.createDiv({ cls: 'sgdb-grids-container' });
+		this.grids.forEach(gridItem => {
+			const wrapper = grid.createDiv({ cls: 'sgdb-grid-item' });
+			const img = wrapper.createEl('img', { cls: 'sgdb-grid-thumb' });
+			img.src = gridItem.thumb || gridItem.url;
+			img.alt = '';
+			img.addEventListener('click', () => {
+				this.onSelect(gridItem.url);
+				this.close();
+			});
+		});
+	}
+
+	onClose() {
+		this.contentEl.empty();
+	}
+}
+
 class GameBacklogSettingTab extends PluginSettingTab {
 	plugin: GameBacklogPlugin;
 
@@ -1655,6 +1874,17 @@ class GameBacklogSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.imageDownloadFolder)
 				.onChange(async (value) => {
 					this.plugin.settings.imageDownloadFolder = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName(this.plugin.t('settingsSteamGridDbName'))
+			.setDesc(this.plugin.t('settingsSteamGridDbDesc'))
+			.addText(text => text
+				.setPlaceholder(this.plugin.t('settingsSteamGridDbPlaceholder'))
+				.setValue(this.plugin.settings.steamGridDbApiKey)
+				.onChange(async (value) => {
+					this.plugin.settings.steamGridDbApiKey = value;
 					await this.plugin.saveSettings();
 				}));
 

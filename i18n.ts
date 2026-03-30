@@ -109,7 +109,21 @@ const esTranslations = {
 		noticeAssetsSyncStarted: 'Descargando assets del plugin...',
 		noticeAssetsSyncNoFiles: 'No se encontraron archivos para descargar.',
 		noticeAssetsSyncSuccess: 'Assets descargados correctamente: {count}',
-		noticeAssetsSyncError: 'Error al descargar assets: {error}'
+		noticeAssetsSyncError: 'Error al descargar assets: {error}',
+		settingsSteamGridDbName: 'SteamGridDB API Key',
+		settingsSteamGridDbDesc: 'API key para buscar portadas en SteamGridDB. Generá una en steamgriddb.com > Preferencias',
+		settingsSteamGridDbPlaceholder: 'Tu API key de SteamGridDB',
+		steamGridDbSearchTooltip: 'Buscar portada en SteamGridDB',
+		steamGridDbNoApiKey: 'Configurá tu API key de SteamGridDB en las opciones del plugin primero',
+		steamGridDbModalTitle: 'Buscar en SteamGridDB',
+		steamGridDbSearchPlaceholder: 'Nombre del juego...',
+		steamGridDbSearchAction: 'Buscar',
+		steamGridDbBackButton: '← Volver',
+		steamGridDbNoResults: 'No se encontraron juegos',
+		steamGridDbLoadingGames: 'Buscando juegos...',
+		steamGridDbLoadingGrids: 'Cargando portadas...',
+		steamGridDbNoGrids: 'No se encontraron portadas para este juego',
+		steamGridDbSearchError: 'Error al buscar: {error}'
 } as const;
 
 type TranslationTable = typeof esTranslations;
@@ -224,7 +238,21 @@ const enTranslations: TranslationDictionary = {
 		noticeAssetsSyncStarted: 'Downloading plugin assets...',
 		noticeAssetsSyncNoFiles: 'No files were found to download.',
 		noticeAssetsSyncSuccess: 'Assets downloaded successfully: {count}',
-		noticeAssetsSyncError: 'Error downloading assets: {error}'
+		noticeAssetsSyncError: 'Error downloading assets: {error}',
+		settingsSteamGridDbName: 'SteamGridDB API Key',
+		settingsSteamGridDbDesc: 'API key for searching covers on SteamGridDB. Generate one at steamgriddb.com > Preferences',
+		settingsSteamGridDbPlaceholder: 'Your SteamGridDB API key',
+		steamGridDbSearchTooltip: 'Search cover on SteamGridDB',
+		steamGridDbNoApiKey: 'Configure your SteamGridDB API key in plugin settings first',
+		steamGridDbModalTitle: 'Search on SteamGridDB',
+		steamGridDbSearchPlaceholder: 'Game name...',
+		steamGridDbSearchAction: 'Search',
+		steamGridDbBackButton: '← Back',
+		steamGridDbNoResults: 'No games found',
+		steamGridDbLoadingGames: 'Searching games...',
+		steamGridDbLoadingGrids: 'Loading covers...',
+		steamGridDbNoGrids: 'No covers found for this game',
+		steamGridDbSearchError: 'Search error: {error}'
 	};
 
 const translations: Record<AppLanguage, TranslationDictionary> = {
