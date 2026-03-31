@@ -338,7 +338,7 @@ export default class GameBacklogPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		const rawData = (await this.loadData()) as Partial<GameBacklogSettings> & { showPlatform?: boolean };
+		const rawData = ((await this.loadData()) ?? {}) as Partial<GameBacklogSettings> & { showPlatform?: boolean };
 		const { showPlatform, ...rest } = rawData;
 
 		const migratedPlatformMode: PlatformMode = rawData.platformMode
