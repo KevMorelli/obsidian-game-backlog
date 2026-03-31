@@ -308,6 +308,49 @@
 	gap: 3px;
 	margin-bottom: 6px;
 	font-size: 18px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.game-rating-compact {
+	font-size: 16px;
+	font-weight: 700;
+	letter-spacing: 0.4px;
+	line-height: 1;
+}
+
+.game-score-circle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 700;
+	color: #111111;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.game-score-circle-small {
+	width: 26px;
+	height: 26px;
+	font-size: 12px;
+}
+
+.game-score-low {
+	background: #ef4444;
+	color: #ffffff;
+}
+
+.game-score-mid {
+	background: #facc15;
+	color: #111827;
+}
+
+.game-score-high {
+	background: #22c55e;
+	color: #052e16;
 }
 
 .star {
@@ -578,6 +621,12 @@
 	.game-rating {
 		font-size: 14px;
 	}
+
+	.game-score-circle {
+		width: 28px;
+		height: 28px;
+		font-size: 12px;
+	}
 	
 	.game-details {
 		font-size: 11px;
@@ -807,5 +856,34 @@
 	height: auto;
 	display: block;
 	object-fit: cover;
+}
+
+/* DLC badge */
+.game-dlc-badge {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	background: rgba(120, 60, 200, 0.85);
+	color: #ffffff;
+	font-size: 10px;
+	font-weight: 700;
+	padding: 3px 7px;
+	border-radius: 999px;
+	letter-spacing: 0.5px;
+	z-index: 9;
+	pointer-events: none;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* DLC icon in table view */
+.game-table-dlc-icon {
+	width: 1.2em;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.game-table-dlc-icon.is-empty {
+	visibility: hidden;
 }
 

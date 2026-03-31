@@ -34,7 +34,8 @@ enum GamePlatform {
 	DOS = 'DOS',
 	NEO_GEO = 'Neo Geo',
 	SEGA_SATURN = 'Saturn',
-	ATARI_2600 = 'Atari 2600'
+	ATARI_2600 = 'Atari 2600',
+	STEAM_DECK_PC = 'Steam Deck / PC'
 }
 
 const PLATFORM_GROUPS: Array<{ label: string; platforms: GamePlatform[] }> = [
@@ -43,7 +44,8 @@ const PLATFORM_GROUPS: Array<{ label: string; platforms: GamePlatform[] }> = [
 		platforms: [
 			GamePlatform.DOS,
 			GamePlatform.PC,
-			GamePlatform.STEAM_DECK
+			GamePlatform.STEAM_DECK,
+			GamePlatform.STEAM_DECK_PC
 		]
 	},
 	{
@@ -111,6 +113,7 @@ interface GameEntry {
 	completionDate: string;
 	platform: GamePlatform;
 	platinum: boolean;
+	dlc: boolean;
 	hours: number;
 }
 
@@ -127,6 +130,7 @@ interface BlockConfig {
 }
 
 type PlatformMode = 'none' | 'image' | 'label';
+type ScoreType = 'stars-5' | 'stars-10' | 'numeric-10';
 
 interface SGDBGame {
 	id: number;
@@ -146,6 +150,7 @@ interface GameBacklogSettings {
 	defaultCoverImage: string;
 	defaultPlatform: GamePlatform;
 	platformMode: PlatformMode;
+	scoreType: ScoreType;
 	imageDownloadFolder: string;
 	cardColor: string;
 	textColor: string;
@@ -159,6 +164,7 @@ const DEFAULT_SETTINGS: GameBacklogSettings = {
 	defaultCoverImage: '',
 	defaultPlatform: GamePlatform.PC,
 	platformMode: 'image',
+	scoreType: 'stars-5',
 	imageDownloadFolder: '',
 	cardColor: '#35393d',
 	textColor: '',
@@ -177,6 +183,115 @@ export default class GameBacklogPlugin extends Plugin {
 
 	getDateLocale(): string {
 		return this.settings.language === 'en' ? 'en-US' : 'es-ES';
+	}
+
+	getScoreBounds(): { min: number; max: number } {
+		switch (this.settings.scoreType) {
+			case 'stars-10':
+				return { min: 1, max: 10 };
+			case 'numeric-10':
+				return { min: 0, max: 10 };
+			case 'stars-5':
+			default:
+				return { min: 1, max: 5 };
+		}
+	}
+
+	getDefaultRatingValue(): number {
+		switch (this.settings.scoreType) {
+			case 'stars-10':
+			case 'numeric-10':
+				return 5;
+			case 'stars-5':
+			default:
+				return 3;
+		}
+	}
+
+	normalizeRatingValue(rawValue: number): number {
+		const value = Number.isFinite(rawValue) ? Math.round(rawValue) : 0;
+		const { max } = this.getScoreBounds();
+		return Math.max(0, Math.min(max, value));
+	}
+
+	private getNumericScoreClass(score: number): string {
+		if (score <= 4) return 'game-score-low';
+		if (score <= 7) return 'game-score-mid';
+		return 'game-score-high';
+	}
+
+	private renderStars(container: HTMLElement, rating: number, maxStars: number): void {
+		for (let i = 1; i <= maxStars; i++) {
+			const star = container.createSpan({
+				cls: i <= rating ? 'star filled' : 'star empty'
+			});
+			star.textContent = '★';
+		}
+	}
+
+	renderCardRating(container: HTMLElement, rating: number): void {
+		const normalizedRating = this.normalizeRatingValue(rating || 0);
+
+		switch (this.settings.scoreType) {
+			case 'stars-10':
+				container.addClass('game-rating-compact');
+				container.textContent = normalizedRating > 0 ? `${normalizedRating} ⭐` : this.t('emptyValue');
+				break;
+			case 'numeric-10': {
+				const scoreCircle = container.createSpan({
+					cls: `game-score-circle ${this.getNumericScoreClass(normalizedRating)}`,
+					text: String(normalizedRating)
+				});
+				scoreCircle.setAttribute('aria-label', `${this.t('viewRatingLabel')}${normalizedRating}`);
+				break;
+			}
+			case 'stars-5':
+			default:
+				this.renderStars(container, normalizedRating, 5);
+				break;
+		}
+	}
+
+	renderDetailRating(container: HTMLElement, rating: number): void {
+		const normalizedRating = this.normalizeRatingValue(rating || 0);
+
+		switch (this.settings.scoreType) {
+			case 'stars-10':
+				this.renderStars(container, normalizedRating, 10);
+				break;
+			case 'numeric-10': {
+				const scoreCircle = container.createSpan({
+					cls: `game-score-circle ${this.getNumericScoreClass(normalizedRating)}`,
+					text: String(normalizedRating)
+				});
+				scoreCircle.setAttribute('aria-label', `${this.t('viewRatingLabel')}${normalizedRating}`);
+				break;
+			}
+			case 'stars-5':
+			default:
+				this.renderStars(container, normalizedRating, 5);
+				break;
+		}
+	}
+
+	renderTableRating(container: HTMLElement, rating: number): void {
+		const normalizedRating = this.normalizeRatingValue(rating || 0);
+
+		switch (this.settings.scoreType) {
+			case 'numeric-10': {
+				const scoreCircle = container.createSpan({
+					cls: `game-score-circle game-score-circle-small ${this.getNumericScoreClass(normalizedRating)}`,
+					text: String(normalizedRating)
+				});
+				scoreCircle.setAttribute('aria-label', `${this.t('viewRatingLabel')}${normalizedRating}`);
+				break;
+			}
+			case 'stars-10':
+			case 'stars-5':
+			default:
+				container.textContent = normalizedRating > 0 ? `${normalizedRating} ★` : this.t('emptyValue');
+				break;
+		}
 	}
 
 	async onload() {
@@ -198,6 +313,7 @@ export default class GameBacklogPlugin extends Plugin {
 					`platform: ${defaultPlatform}`,
 					'hours: 0',
 					'platinum: false',
+					'dlc: false',
 					'```'
 				].join('\n');
 
@@ -378,6 +494,9 @@ export default class GameBacklogPlugin extends Plugin {
 					if (typeof currentGame.platinum !== 'boolean') {
 						currentGame.platinum = false;
 					}
+					if (typeof currentGame.dlc !== 'boolean') {
+						currentGame.dlc = false;
+					}
 					if (typeof currentGame.hours !== 'number') {
 						currentGame.hours = 0;
 					}
@@ -417,6 +536,9 @@ export default class GameBacklogPlugin extends Plugin {
 				case 'platinum':
 					currentGame.platinum = ['true', '1', 'yes'].includes(value.toLowerCase());
 					break;
+				case 'dlc':
+					currentGame.dlc = ['true', '1', 'yes'].includes(value.toLowerCase());
+					break;
 			}
 		}
 		
@@ -430,6 +552,9 @@ export default class GameBacklogPlugin extends Plugin {
 			}
 			if (typeof currentGame.platinum !== 'boolean') {
 				currentGame.platinum = false;
+			}
+			if (typeof currentGame.dlc !== 'boolean') {
+				currentGame.dlc = false;
 			}
 			if (typeof currentGame.hours !== 'number') {
 				currentGame.hours = 0;
@@ -492,7 +617,8 @@ export default class GameBacklogPlugin extends Plugin {
 			[GamePlatform.DOS]: 'DOS.png',
 			[GamePlatform.NEO_GEO]: 'Neo Geo.png',
 			[GamePlatform.SEGA_SATURN]: 'Saturn.png',
-			[GamePlatform.ATARI_2600]: 'Atari 2600.png'
+			[GamePlatform.ATARI_2600]: 'Atari 2600.png',
+			[GamePlatform.STEAM_DECK_PC]: 'Steam Deck - PC.png'
 		};
 		return logoMap[platform] || '';
 	}
@@ -885,6 +1011,11 @@ export default class GameBacklogPlugin extends Plugin {
 				};
 			}
 
+			if (game.dlc) {
+				const dlcBadge = coverContainer.createDiv({ cls: 'game-dlc-badge' });
+				dlcBadge.textContent = this.t('dlcBadgeAlt');
+			}
+
 			// Visualización de plataforma por modo global
 			if (this.settings.platformMode === 'image') {
 				const brandContainer = card.createDiv({ cls: 'game-brand-logo' });
@@ -919,12 +1050,7 @@ export default class GameBacklogPlugin extends Plugin {
 			
 			// Rating (estrellas)
 			const ratingContainer = info.createDiv({ cls: 'game-rating' });
-			for (let i = 1; i <= 5; i++) {
-				const star = ratingContainer.createSpan({ 
-					cls: i <= (game.rating || 0) ? 'star filled' : 'star empty'
-				});
-				star.textContent = '★';
-			}
+			this.renderCardRating(ratingContainer, game.rating || 0);
 			
 			// Fecha y plataforma
 			const details = info.createDiv({ cls: 'game-details' });
@@ -1000,6 +1126,13 @@ export default class GameBacklogPlugin extends Plugin {
 					platinumIcon.addClass('is-empty');
 					platinumIcon.textContent = '🏆';
 				}
+				const dlcIcon = nameContent.createSpan({ cls: 'game-table-dlc-icon' });
+				if (game.dlc) {
+					dlcIcon.textContent = '🧩';
+				} else {
+					dlcIcon.addClass('is-empty');
+					dlcIcon.textContent = '🧩';
+				}
 				const nameText = nameContent.createSpan({ cls: 'game-table-name-text' });
 				nameText.textContent = gameName;
 				
@@ -1024,11 +1157,7 @@ export default class GameBacklogPlugin extends Plugin {
 				
 				// Puntaje
 				const scoreCell = row.createEl('td');
-				if (game.rating) {
-					scoreCell.textContent = `${game.rating} ⭐`;
-				} else {
-					scoreCell.textContent = this.t('emptyValue');
-				}
+				this.renderTableRating(scoreCell, game.rating || 0);
 				
 				// Duración
 				const hoursCell = row.createEl('td');
@@ -1063,7 +1192,8 @@ export default class GameBacklogPlugin extends Plugin {
 		
 		// Función para actualizar estadísticas
 		const renderStats = () => {
-			const totalGames = games.length;
+			const totalGames = games.filter(g => !g.dlc).length;
+			const totalDlcs = games.filter(g => g.dlc).length;
 			const totalHours = games.reduce((sum, game) => sum + (game.hours || 0), 0);
 			
 			// Labels de estadísticas
@@ -1071,6 +1201,11 @@ export default class GameBacklogPlugin extends Plugin {
 			
 			const gamesLabel = statsLabels.createDiv({ cls: 'game-stat-item' });
 			gamesLabel.textContent = this.t('statsCompleted', { count: totalGames });
+
+			if (totalDlcs > 0) {
+				const dlcsLabel = statsLabels.createDiv({ cls: 'game-stat-item' });
+				dlcsLabel.textContent = this.t('statsDlcCompleted', { count: totalDlcs });
+			}
 			
 			const hoursLabel = statsLabels.createDiv({ cls: 'game-stat-item' });
 			hoursLabel.textContent = this.t('statsTotalHours', { hours: Math.round(totalHours) });
@@ -1168,7 +1303,7 @@ export default class GameBacklogPlugin extends Plugin {
 		
 		if (match) {
 			const gameId = game.id || generateGameId();
-			const newEntry = `\n---\nid: ${gameId}\nname: ${game.name}\ncover: ${game.cover}\nrating: ${game.rating}\ndate: ${game.completionDate}\nplatform: ${game.platform}\nhours: ${game.hours}\nplatinum: ${game.platinum}\n`;
+			const newEntry = `\n---\nid: ${gameId}\nname: ${game.name}\ncover: ${game.cover}\nrating: ${game.rating}\ndate: ${game.completionDate}\nplatform: ${game.platform}\nhours: ${game.hours}\nplatinum: ${game.platinum}\ndlc: ${game.dlc}\n`;
 			const updatedBlock = match[1] + newEntry;
 			const newContent = content.replace(codeBlockRegex, `\`\`\`game-backlog\n${updatedBlock}\`\`\``);
 			
@@ -1191,7 +1326,7 @@ export default class GameBacklogPlugin extends Plugin {
 			const oldId = oldGame.id || '';
 			const stableId = newGame.id || oldId || generateGameId();
 
-			const newEntry = `---\nid: ${stableId}\nname: ${newGame.name}\ncover: ${newGame.cover}\nrating: ${newGame.rating}\ndate: ${newGame.completionDate}\nplatform: ${newGame.platform}\nhours: ${newGame.hours}\nplatinum: ${newGame.platinum}\n`;
+			const newEntry = `---\nid: ${stableId}\nname: ${newGame.name}\ncover: ${newGame.cover}\nrating: ${newGame.rating}\ndate: ${newGame.completionDate}\nplatform: ${newGame.platform}\nhours: ${newGame.hours}\nplatinum: ${newGame.platinum}\ndlc: ${newGame.dlc}\n`;
 
 			const originalBlock = match[1];
 			const entries = originalBlock.match(/---\s*\n[\s\S]*?(?=(?:\n---\s*\n)|$)/g) || [];
@@ -1310,6 +1445,7 @@ class AddGameModal extends Modal {
 	platform: GamePlatform = GamePlatform.PC;
 	hours: number = 0;
 	platinum: boolean = false;
+	dlc: boolean = false;
 
 	constructor(app: App, onSubmit: (game: GameEntry) => void, plugin: GameBacklogPlugin, existingGame?: GameEntry) {
 		super(app);
@@ -1321,12 +1457,16 @@ class AddGameModal extends Modal {
 			this.id = existingGame.id || '';
 			this.name = existingGame.name || '';
 			this.cover = existingGame.cover || '';
-			this.rating = existingGame.rating || 3;
+			this.rating = typeof existingGame.rating === 'number'
+				? existingGame.rating
+				: this.plugin.getDefaultRatingValue();
 			this.completionDate = existingGame.completionDate || '';
 			this.platform = existingGame.platform || this.plugin.settings.defaultPlatform;
 			this.hours = existingGame.hours || 0;
 			this.platinum = existingGame.platinum || false;
+			this.dlc = existingGame.dlc || false;
 		} else {
+			this.rating = this.plugin.getDefaultRatingValue();
 			this.platform = this.plugin.settings.defaultPlatform;
 			// Fecha actual por defecto
 			const today = new Date();
@@ -1420,16 +1560,38 @@ class AddGameModal extends Modal {
 		}
 
 		// Rating
-		new Setting(contentEl)
+		const ratingBounds = this.plugin.getScoreBounds();
+		const ratingSetting = new Setting(contentEl)
 			.setName(this.plugin.t('modalRatingLabel'))
-			.setDesc(this.plugin.t('modalRatingDesc'))
-			.addSlider(slider => slider
-				.setLimits(1, 5, 1)
-				.setValue(this.rating)
+			.setDesc(this.plugin.t('modalRatingDesc'));
+
+		if (this.plugin.settings.scoreType === 'numeric-10') {
+			ratingSetting.addText(text => text
+				.setPlaceholder('0')
+				.setValue(String(this.plugin.normalizeRatingValue(this.rating)))
+				.onChange(value => {
+					const parsed = parseInt(value, 10);
+					this.rating = Number.isFinite(parsed)
+						? Math.max(ratingBounds.min, Math.min(ratingBounds.max, parsed))
+						: ratingBounds.min;
+				})
+				.inputEl.type = 'number');
+
+			const inputEl = ratingSetting.controlEl.querySelector('input');
+			if (inputEl instanceof HTMLInputElement) {
+				inputEl.min = String(ratingBounds.min);
+				inputEl.max = String(ratingBounds.max);
+				inputEl.step = '1';
+			}
+		} else {
+			ratingSetting.addSlider(slider => slider
+				.setLimits(ratingBounds.min, ratingBounds.max, 1)
+				.setValue(Math.max(ratingBounds.min, Math.min(ratingBounds.max, this.rating)))
 				.setDynamicTooltip()
 				.onChange(value => {
 					this.rating = value;
 				}));
+		}
 		
 		// Fecha de completación
 		new Setting(contentEl)
@@ -1497,6 +1659,15 @@ class AddGameModal extends Modal {
 				.onChange(value => {
 					this.platinum = value;
 				}));
+
+		new Setting(contentEl)
+			.setName(this.plugin.t('modalDlcLabel'))
+			.setDesc(this.plugin.t('modalDlcDesc'))
+			.addToggle(toggle => toggle
+				.setValue(this.dlc)
+				.onChange(value => {
+					this.dlc = value;
+				}));
 		
 		// Botones
 		new Setting(contentEl)
@@ -1512,7 +1683,8 @@ class AddGameModal extends Modal {
 						completionDate: this.completionDate,
 						platform: this.platform,
 						hours: this.hours,
-						platinum: this.platinum
+						platinum: this.platinum,
+						dlc: this.dlc
 					});
 					this.close();
 				}))
@@ -1559,12 +1731,7 @@ class GameViewModal extends Modal {
 		const ratingLabel = ratingContainer.createSpan({ cls: 'game-view-label' });
 		ratingLabel.textContent = this.plugin.t('viewRatingLabel');
 		const ratingValue = ratingContainer.createSpan({ cls: 'game-view-value' });
-		for (let i = 1; i <= 5; i++) {
-			ratingValue.createSpan({
-				cls: i <= (this.game.rating || 0) ? 'star filled' : 'star empty',
-				text: '★'
-			});
-		}
+		this.plugin.renderDetailRating(ratingValue, this.game.rating || 0);
 
 		// Plataforma
 		if (this.game.platform) {
@@ -1618,17 +1785,84 @@ class GameViewModal extends Modal {
 				text: this.plugin.t('buttonDelete')
 			});
 			deleteButton.addEventListener('click', () => {
-				if (!window.confirm(this.plugin.t('confirmDeleteGame'))) {
-					return;
-				}
+				void (async () => {
+					const confirmed = await ConfirmActionModal.confirm(
+						this.app,
+						this.plugin.t('confirmDeleteGame'),
+						this.plugin.t('buttonDelete'),
+						this.plugin.t('buttonCancel')
+					);
 
-				this.close();
-				this.onDelete();
+					if (!confirmed) {
+						return;
+					}
+
+					this.close();
+					this.onDelete();
+				})();
 			});
 		}
 	}
 
 	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+	}
+}
+
+class ConfirmActionModal extends Modal {
+	private readonly message: string;
+	private readonly confirmLabel: string;
+	private readonly cancelLabel: string;
+	private readonly onResolve: (value: boolean) => void;
+
+	private constructor(
+		app: App,
+		message: string,
+		confirmLabel: string,
+		cancelLabel: string,
+		onResolve: (value: boolean) => void
+	) {
+		super(app);
+		this.message = message;
+		this.confirmLabel = confirmLabel;
+		this.cancelLabel = cancelLabel;
+		this.onResolve = onResolve;
+	}
+
+	static confirm(app: App, message: string, confirmLabel: string, cancelLabel: string): Promise<boolean> {
+		return new Promise<boolean>((resolve) => {
+			new ConfirmActionModal(app, message, confirmLabel, cancelLabel, resolve).open();
+		});
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+
+		contentEl.createEl('p', { text: this.message });
+
+		new Setting(contentEl)
+			.addButton((button) => {
+				button
+					.setButtonText(this.confirmLabel)
+					.setWarning()
+					.onClick(() => {
+						this.onResolve(true);
+						this.close();
+					});
+			})
+			.addButton((button) => {
+				button
+					.setButtonText(this.cancelLabel)
+					.onClick(() => {
+						this.onResolve(false);
+						this.close();
+					});
+			});
+	}
+
+	onClose(): void {
 		const { contentEl } = this;
 		contentEl.empty();
 	}
@@ -1699,7 +1933,7 @@ class SteamGridDBSearchModal extends Modal {
 	}
 
 	private async executeSearch(): Promise<void> {
-		const resultsContainer = this.contentEl.querySelector('.sgdb-results') as HTMLElement | null;
+		const resultsContainer = this.contentEl.querySelector<HTMLElement>('.sgdb-results');
 		if (!resultsContainer) return;
 		resultsContainer.empty();
 		resultsContainer.createEl('p', { text: this.plugin.t('steamGridDbLoadingGames') });
@@ -1863,6 +2097,19 @@ class GameBacklogSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.platformMode)
 				.onChange(async (value) => {
 					this.plugin.settings.platformMode = value as PlatformMode;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName(this.plugin.t('settingsScoreTypeName'))
+			.setDesc(this.plugin.t('settingsScoreTypeDesc'))
+			.addDropdown(dropdown => dropdown
+				.addOption('stars-5', this.plugin.t('scoreTypeStars5'))
+				.addOption('stars-10', this.plugin.t('scoreTypeStars10'))
+				.addOption('numeric-10', this.plugin.t('scoreTypeNumeric10'))
+				.setValue(this.plugin.settings.scoreType)
+				.onChange(async (value) => {
+					this.plugin.settings.scoreType = value as ScoreType;
 					await this.plugin.saveSettings();
 				}));
 

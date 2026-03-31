@@ -8,6 +8,21 @@ On a MD file press `Control + P` and search for `Game Backlog: Insert game-backl
 This will create a specific block that this widget uses.
 From here you can just use the interactive interface to add new entries.
 
+## 📦 Manual installation
+
+Releases for this plugin are published on the GitHub repository Releases page.
+
+1. Download the latest release files from GitHub Releases:
+	- `main.js`
+	- `manifest.json`
+	- `styles.css`
+2. In your Obsidian vault, open the folder `.obsidian/plugins/game-backlog-tracker/`.
+3. Copy the downloaded files into that folder.
+4. Open Obsidian and go to `Settings > Community plugins`.
+5. Refresh community plugins if needed, then enable `Game Backlog Tracker`.
+
+If the `game-backlog-tracker` folder does not exist yet, create it manually before copying the files.
+
 ## 🎮 Features
 
 - Switch between visual grid or table mode
@@ -20,6 +35,8 @@ From here you can just use the interactive interface to add new entries.
 - English/spanish language
 - Fully customizable
 - Customizable themes
+- Support for SteamGridDB
+- Support for DLC campaigns
 
 ## ❗ Assets
 
@@ -43,11 +60,6 @@ MIT
 ![Screenshot 5](https://github.com/KevMorelli/obsidian-game-backlog/blob/main/screenshots/Screenshot_5.png)
 
 
-## 🔧 Future features
-
-- Support for SteamGridDB
-- Support for DLC campaigns
-- Better mobile support
 
 ## 🤝 Contributions
 

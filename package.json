@@ -16,7 +16,7 @@
 		"@typescript-eslint/parser": "^8.57.1",
 		"builtin-modules": "^4.0.0",
 		"esbuild": "^0.20.0",
-		"eslint": "^10.0.3",
+		"eslint": "^10.1.0",
 		"eslint-plugin-obsidianmd": "^0.1.9",
 		"obsidian": "latest",
 		"tslib": "^2.6.0",
