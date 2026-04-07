@@ -129,6 +129,17 @@ interface BlockConfig {
 	topGame3: string;
 }
 
+interface GameBacklogProfileConfig {
+	playerName: string;
+	avatar: string;
+	path: string;
+	totalCompleted: string;
+	totalHours: string;
+	totalPlatinums: string;
+	mostUsedPlatform: string;
+	files: string[];
+}
+
 type PlatformMode = 'none' | 'image' | 'label';
 type ScoreType = 'stars-5' | 'stars-10' | 'numeric-10';
 
@@ -321,10 +332,39 @@ export default class GameBacklogPlugin extends Plugin {
 			}
 		});
 
+		this.addCommand({
+			id: 'insert-game-backlog-profile-block',
+			name: this.t('commandInsertProfileBlock'),
+			editorCallback: (editor) => {
+				const defaultBlock = [
+					'```game-backlog-profile',
+					'playerName: Player 1',
+					'avatar: ',
+					'path: ',
+					'totalCompleted: ',
+					'totalHours: ',
+					'platinums: ',
+					'mostUsedPlatform: ',
+					'files: ',
+					'```'
+				].join('\n');
+
+				editor.replaceSelection(defaultBlock);
+			}
+		});
+
 		// Registrar el procesador para bloques de código con lenguaje "game-backlog"
 		this.registerMarkdownCodeBlockProcessor('game-backlog', (source, el, ctx) => {
 			try {
 				this.renderGameBacklog(source, el, ctx);
+			} catch {
+				el.createDiv({ text: this.t('renderError') });
+			}
+		});
+
+		this.registerMarkdownCodeBlockProcessor('game-backlog-profile', async (source, el, ctx) => {
+			try {
+				await this.renderGameBacklogProfile(source, el, ctx);
 			} catch {
 				el.createDiv({ text: this.t('renderError') });
 			}
@@ -861,6 +901,329 @@ export default class GameBacklogPlugin extends Plugin {
 		const newBlock = configSection + entriesPart;
 		const newContent = content.replace(codeBlockRegex, '```game-backlog\n' + newBlock + '```');
 		await this.app.vault.modify(file, newContent);
+	}
+
+	parseProfileConfig(source: string): GameBacklogProfileConfig {
+		const config: GameBacklogProfileConfig = {
+			playerName: this.t('profileDefaultPlayer'),
+			avatar: '',
+			path: '',
+			totalCompleted: '',
+			totalHours: '',
+			totalPlatinums: '',
+			mostUsedPlatform: '',
+			files: []
+		};
+
+		let legacyScope: 'vault' | 'folder' = 'vault';
+		let legacyFolder = '';
+		const lines = source.split('\n');
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (!trimmed || trimmed.startsWith('#')) continue;
+
+			const colonIdx = trimmed.indexOf(':');
+			if (colonIdx === -1) continue;
+
+			const key = trimmed.slice(0, colonIdx).trim().toLowerCase();
+			const value = trimmed.slice(colonIdx + 1).trim();
+
+			switch (key) {
+				case 'player':
+				case 'playername':
+				case 'name':
+					config.playerName = value || config.playerName;
+					break;
+				case 'avatar':
+					config.avatar = value;
+					break;
+				case 'path':
+					config.path = value.replace(/^\/+|\/+$/g, '');
+					break;
+				case 'scope':
+					legacyScope = value.toLowerCase() === 'folder' ? 'folder' : 'vault';
+					break;
+				case 'folder':
+					legacyFolder = value.replace(/^\/+|\/+$/g, '');
+					break;
+				case 'totalcompleted':
+					config.totalCompleted = value;
+					break;
+				case 'totalhours':
+					config.totalHours = value;
+					break;
+				case 'platinums':
+					config.totalPlatinums = value;
+					break;
+				case 'mostusedplatform':
+					config.mostUsedPlatform = value;
+					break;
+				case 'files':
+					config.files = value
+						? value.split('|').map((item) => item.trim()).filter(Boolean)
+						: [];
+					break;
+				case 'file':
+					if (value) {
+						config.files.push(value);
+					}
+					break;
+			}
+		}
+
+		if (!config.path && legacyScope === 'folder' && legacyFolder) {
+			config.path = legacyFolder;
+		}
+
+		config.files = Array.from(new Set(config.files));
+		return config;
+	}
+
+	private extractGameBacklogBlocks(content: string): string[] {
+		const blocks: string[] = [];
+		const regex = /```game-backlog\s*\n([\s\S]*?)```/g;
+		let match: RegExpExecArray | null;
+
+		while ((match = regex.exec(content)) !== null) {
+			blocks.push(match[1]);
+		}
+
+		return blocks;
+	}
+
+	private async collectGamesForProfile(config: GameBacklogProfileConfig): Promise<{ games: GameEntry[]; backlogFiles: TFile[] }> {
+		const normalizedPath = config.path.trim().replace(/^\/+|\/+$/g, '');
+		const markdownFiles = this.app.vault.getMarkdownFiles();
+		const candidateFiles = normalizedPath
+			? markdownFiles.filter((file) => file.path.startsWith(`${normalizedPath}/`))
+			: markdownFiles;
+
+		const results = await Promise.all(candidateFiles.map(async (file) => {
+			const content = await this.app.vault.cachedRead(file);
+			const blocks = this.extractGameBacklogBlocks(content);
+
+			if (!blocks.length) {
+				return { file, games: [] as GameEntry[], hasBacklog: false };
+			}
+
+			const fileGames: GameEntry[] = [];
+			for (const block of blocks) {
+				fileGames.push(...this.parseGameEntries(block));
+			}
+
+			return { file, games: fileGames, hasBacklog: true };
+		}));
+
+		const games: GameEntry[] = [];
+		const backlogFiles: TFile[] = [];
+
+		for (const result of results) {
+			if (result.hasBacklog) {
+				backlogFiles.push(result.file);
+			}
+			games.push(...result.games);
+		}
+
+		return { games, backlogFiles };
+	}
+
+	private getMostUsedPlatform(games: GameEntry[]): string {
+		const platformCount = new Map<string, number>();
+
+		for (const game of games) {
+			const platform = (game.platform || '').trim();
+			if (!platform) continue;
+			platformCount.set(platform, (platformCount.get(platform) ?? 0) + 1);
+		}
+
+		let mostUsed = '';
+		let highestCount = 0;
+
+		for (const [platform, count] of platformCount.entries()) {
+			if (count > highestCount) {
+				mostUsed = platform;
+				highestCount = count;
+			}
+		}
+
+		return mostUsed || this.t('emptyValue');
+	}
+
+	private isProfileDataEmpty(config: GameBacklogProfileConfig): boolean {
+		return !config.totalCompleted || !config.totalHours || !config.totalPlatinums || !config.mostUsedPlatform;
+	}
+
+	private resolveProfileFiles(config: GameBacklogProfileConfig): TFile[] {
+		return config.files
+			.map((filePath) => this.app.vault.getAbstractFileByPath(filePath))
+			.filter((file): file is TFile => file instanceof TFile);
+	}
+
+	private async saveProfileBlockData(ctx: MarkdownPostProcessorContext, config: GameBacklogProfileConfig): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(ctx.sourcePath);
+		if (!(file instanceof TFile)) return;
+
+		const content = await this.app.vault.read(file);
+		const codeBlockRegex = /```game-backlog-profile\n([\s\S]*?)```/;
+		if (!codeBlockRegex.test(content)) return;
+
+		const lines = [
+			`playerName: ${config.playerName}`,
+			`avatar: ${config.avatar}`,
+			`path: ${config.path}`,
+			`totalCompleted: ${config.totalCompleted}`,
+			`totalHours: ${config.totalHours}`,
+			`platinums: ${config.totalPlatinums}`,
+			`mostUsedPlatform: ${config.mostUsedPlatform}`
+		];
+
+		if (config.files.length > 0) {
+			config.files.forEach((filePath) => {
+				lines.push(`file: ${filePath}`);
+			});
+		} else {
+			lines.push('files: ');
+		}
+
+		const newContent = content.replace(codeBlockRegex, `\`\`\`game-backlog-profile\n${lines.join('\n')}\n\`\`\``);
+		if (newContent !== content) {
+			await this.app.vault.modify(file, newContent);
+		}
+	}
+
+	private async recalculateProfileData(ctx: MarkdownPostProcessorContext, config: GameBacklogProfileConfig): Promise<TFile[]> {
+		const { games, backlogFiles } = await this.collectGamesForProfile(config);
+		const totalCompleted = games.length;
+		const totalHours = games.reduce((sum, game) => sum + (game.hours || 0), 0);
+		const totalPlatinums = games.filter((game) => game.platinum).length;
+		const mostUsedPlatform = this.getMostUsedPlatform(games);
+		const formattedHours = Number.isInteger(totalHours) ? String(totalHours) : totalHours.toFixed(1);
+
+		config.totalCompleted = String(totalCompleted);
+		config.totalHours = formattedHours;
+		config.totalPlatinums = String(totalPlatinums);
+		config.mostUsedPlatform = mostUsedPlatform;
+		config.files = Array.from(new Set(backlogFiles.map((file) => file.path)));
+
+		await this.saveProfileBlockData(ctx, config);
+		return backlogFiles;
+	}
+
+	async renderGameBacklogProfile(source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext): Promise<void> {
+		const config = this.parseProfileConfig(source);
+		const container = el.createDiv({ cls: 'game-backlog-profile-container' });
+		const playerName = config.playerName || this.t('profileDefaultPlayer');
+		const avatarSource = this.resolveImageSource(config.avatar, ctx.sourcePath);
+
+		let renderProfileContent: (forceRefresh?: boolean) => Promise<void>;
+		const appendRefreshToolbar = (parent: HTMLElement, disabled: boolean = false): void => {
+			const toolbar = parent.createDiv({ cls: 'game-backlog-profile-toolbar' });
+			const refreshButton = toolbar.createEl('button', {
+				cls: 'game-backlog-profile-refresh-button',
+				text: '🔄'
+			});
+			refreshButton.title = this.t('profileRefreshTooltip');
+			refreshButton.setAttribute('aria-label', this.t('profileRefreshTooltip'));
+			refreshButton.disabled = disabled;
+			refreshButton.addEventListener('click', () => {
+				void renderProfileContent(true);
+			});
+		};
+
+		const renderProfileView = (backlogFiles: TFile[]): void => {
+			container.empty();
+			appendRefreshToolbar(container);
+
+			const header = container.createDiv({ cls: 'game-backlog-profile-header' });
+			const avatarWrapper = header.createDiv({ cls: 'game-backlog-profile-avatar-wrapper' });
+			const fallbackAvatar = avatarWrapper.createDiv({ cls: 'game-backlog-profile-avatar-fallback' });
+			const initials = playerName
+				.split(/\s+/)
+				.filter(Boolean)
+				.slice(0, 2)
+				.map((part) => part.charAt(0).toUpperCase())
+				.join('');
+			fallbackAvatar.textContent = initials || '🎮';
+
+			if (avatarSource) {
+				const avatar = avatarWrapper.createEl('img', {
+					cls: 'game-backlog-profile-avatar',
+					attr: {
+						src: avatarSource,
+						alt: playerName
+					}
+				});
+
+				avatar.onerror = () => {
+					avatar.remove();
+				};
+			}
+
+			const heading = header.createDiv({ cls: 'game-backlog-profile-heading' });
+			heading.createEl('h3', { cls: 'game-backlog-profile-player-name', text: playerName });
+
+			const statsList = container.createDiv({ cls: 'game-backlog-profile-stats-list' });
+			[
+				{ emoji: '✅', label: this.t('profileStatCompleted'), value: config.totalCompleted },
+				{ emoji: '⏱️', label: this.t('profileStatHours'), value: `${config.totalHours} hs` },
+				{ emoji: '🏆', label: this.t('profileStatPlatinums'), value: config.totalPlatinums },
+				{ emoji: '🎮', label: this.t('profileStatMostUsedPlatform'), value: config.mostUsedPlatform }
+			].forEach((stat) => {
+				const row = statsList.createDiv({ cls: 'game-backlog-profile-stat-row' });
+				row.createSpan({ cls: 'game-backlog-profile-stat-label-inline', text: `${stat.emoji} ${stat.label}` });
+				row.createSpan({ cls: 'game-backlog-profile-stat-value-inline', text: stat.value || this.t('emptyValue') });
+			});
+
+			if (backlogFiles.length > 0) {
+				const filesSection = container.createDiv({ cls: 'game-backlog-profile-files' });
+				const filesList = filesSection.createDiv({ cls: 'game-backlog-profile-files-list' });
+				[...backlogFiles]
+					.sort((a, b) => a.basename.localeCompare(b.basename, undefined, { sensitivity: 'base' }))
+					.forEach((file) => {
+						const link = filesList.createEl('a', {
+							cls: 'game-backlog-profile-file-link',
+							text: file.basename,
+							attr: {
+								href: '#',
+								title: file.path
+							}
+						});
+
+						link.addEventListener('click', (event) => {
+							event.preventDefault();
+							void this.app.workspace.getLeaf(false).openFile(file);
+						});
+					});
+			}
+
+			if (config.totalCompleted === '0') {
+				container.createDiv({ cls: 'game-backlog-profile-empty', text: this.t('profileNoGames') });
+			}
+		};
+
+		renderProfileContent = async (forceRefresh: boolean = false) => {
+			const shouldRefresh = forceRefresh || this.isProfileDataEmpty(config);
+
+			if (shouldRefresh) {
+				container.empty();
+				appendRefreshToolbar(container, true);
+				container.createDiv({ cls: 'game-backlog-profile-loading', text: this.t('profileLoading') });
+
+				try {
+					const backlogFiles = await this.recalculateProfileData(ctx, config);
+					renderProfileView(backlogFiles);
+				} catch {
+					container.empty();
+					appendRefreshToolbar(container);
+					container.createDiv({ cls: 'game-backlog-profile-empty', text: this.t('renderError') });
+				}
+				return;
+			}
+
+			renderProfileView(this.resolveProfileFiles(config));
+		};
+
+		await renderProfileContent();
 	}
 
 	renderGameBacklog(source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) {

@@ -457,6 +457,176 @@
 	padding: 4px 0;
 }
 
+.game-backlog-profile-container {
+	position: relative;
+	max-width: 760px;
+	margin: 20px auto;
+	padding: 18px;
+	border-radius: 16px;
+	border: 1px solid var(--background-modifier-border);
+	background: linear-gradient(180deg, var(--background-secondary), var(--background-primary));
+}
+
+.game-backlog-profile-toolbar {
+	position: absolute;
+	top: 18px;
+	right: 18px;
+	display: flex;
+	justify-content: flex-end;
+	margin: 0;
+}
+
+.game-backlog-profile-refresh-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	border-radius: 999px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+	transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.game-backlog-profile-refresh-button:hover {
+	background: var(--interactive-accent-hover);
+	transform: translateY(-1px);
+}
+
+.game-backlog-profile-refresh-button:disabled {
+	opacity: 0.75;
+	cursor: wait;
+	transform: none;
+}
+
+.game-backlog-profile-header {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	margin-bottom: 16px;
+	padding-right: 44px;
+	flex-wrap: wrap;
+}
+
+.game-backlog-profile-avatar-wrapper {
+	position: relative;
+	width: 72px;
+	height: 72px;
+	flex-shrink: 0;
+}
+
+.game-backlog-profile-avatar,
+.game-backlog-profile-avatar-fallback {
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+}
+
+.game-backlog-profile-avatar-fallback {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: linear-gradient(135deg, var(--interactive-accent), var(--interactive-accent-hover));
+	color: var(--text-on-accent, #ffffff);
+	font-size: 24px;
+	font-weight: 700;
+	border: 2px solid rgba(255, 255, 255, 0.12);
+}
+
+.game-backlog-profile-avatar {
+	position: absolute;
+	inset: 0;
+	object-fit: cover;
+	border: 2px solid var(--background-modifier-border-hover);
+	background: var(--background-secondary);
+}
+
+.game-backlog-profile-heading {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 4px;
+	min-width: 0;
+}
+
+.game-backlog-profile-player-name {
+	margin: 0;
+	font-size: 1.25rem;
+	line-height: 1.2;
+}
+
+.game-backlog-profile-subtitle {
+	font-size: 13px;
+	color: var(--text-muted);
+}
+
+.game-backlog-profile-stats-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.game-backlog-profile-stat-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.game-backlog-profile-stat-row:last-child {
+	border-bottom: none;
+}
+
+.game-backlog-profile-stat-label-inline {
+	font-size: 14px;
+	color: var(--text-normal);
+}
+
+.game-backlog-profile-stat-value-inline {
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--text-normal);
+	text-align: right;
+	overflow-wrap: anywhere;
+}
+
+.game-backlog-profile-files {
+	margin-top: 0;
+	padding-top: 12px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.game-backlog-profile-files-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+}
+
+.game-backlog-profile-file-link {
+	font-size: 13px;
+	color: var(--link-color);
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.game-backlog-profile-file-link:hover {
+	text-decoration: underline;
+}
+
+.game-backlog-profile-empty,
+.game-backlog-profile-loading {
+	margin-top: 14px;
+	font-size: 13px;
+	color: var(--text-muted);
+}
+
 /* Modal de lectura de juego */
 .game-view-info {
 	display: flex;
