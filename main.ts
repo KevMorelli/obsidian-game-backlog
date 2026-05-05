@@ -35,7 +35,9 @@ enum GamePlatform {
 	NEO_GEO = 'Neo Geo',
 	SEGA_SATURN = 'Saturn',
 	ATARI_2600 = 'Atari 2600',
-	STEAM_DECK_PC = 'Steam Deck / PC'
+	STEAM_DECK_PC = 'Steam Deck / PC',
+	SWITCH2 = 'Switch 2',
+	ANDROID = 'Android'
 }
 
 const PLATFORM_GROUPS: Array<{ label: string; platforms: GamePlatform[] }> = [
@@ -63,7 +65,8 @@ const PLATFORM_GROUPS: Array<{ label: string; platforms: GamePlatform[] }> = [
 			GamePlatform.WII,
 			GamePlatform.NINTENDO_3DS,
 			GamePlatform.WII_U,
-			GamePlatform.SWITCH
+			GamePlatform.SWITCH,
+			GamePlatform.SWITCH2
 		]
 	},
 	{
@@ -100,7 +103,8 @@ const PLATFORM_GROUPS: Array<{ label: string; platforms: GamePlatform[] }> = [
 		platforms: [
 			GamePlatform.ATARI_2600,
 			GamePlatform.NEO_GEO,
-			GamePlatform.MAME
+			GamePlatform.MAME,
+			GamePlatform.ANDROID
 		]
 	}
 ];
@@ -137,10 +141,11 @@ interface GameBacklogProfileConfig {
 	totalHours: string;
 	totalPlatinums: string;
 	mostUsedPlatform: string;
+	retroAchievementsUrl: string;
 	files: string[];
 }
 
-type PlatformMode = 'none' | 'image' | 'label';
+type PlatformMode = 'none' | 'label';
 type ScoreType = 'stars-5' | 'stars-10' | 'numeric-10';
 
 interface SGDBGame {
@@ -174,7 +179,7 @@ const DEFAULT_SETTINGS: GameBacklogSettings = {
 	language: 'es',
 	defaultCoverImage: '',
 	defaultPlatform: GamePlatform.PC,
-	platformMode: 'image',
+	platformMode: 'label',
 	scoreType: 'stars-5',
 	imageDownloadFolder: '',
 	cardColor: '#35393d',
@@ -381,8 +386,9 @@ export default class GameBacklogPlugin extends Plugin {
 		const rawData = ((await this.loadData()) ?? {}) as Partial<GameBacklogSettings> & { showPlatform?: boolean };
 		const { showPlatform, ...rest } = rawData;
 
-		const migratedPlatformMode: PlatformMode = rawData.platformMode
-			?? (typeof showPlatform === 'boolean' ? (showPlatform ? 'image' : 'none') : DEFAULT_SETTINGS.platformMode);
+		const rawPlatformMode = (rawData.platformMode as string) === 'image' ? 'label' : rawData.platformMode;
+		const migratedPlatformMode: PlatformMode = rawPlatformMode
+			?? (typeof showPlatform === 'boolean' ? (showPlatform ? 'label' : 'none') : DEFAULT_SETTINGS.platformMode);
 
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, rest, { platformMode: migratedPlatformMode });
 
@@ -621,46 +627,6 @@ export default class GameBacklogPlugin extends Plugin {
 		const normalized = trimmed.toLowerCase();
 		const caseInsensitiveMatch = platforms.find((platform) => platform.toLowerCase() === normalized);
 		return caseInsensitiveMatch ? (caseInsensitiveMatch as GamePlatform) : fallbackPlatform;
-	}
-
-	getPlatformLogo(platform: GamePlatform): string {
-		const logoMap: { [key in GamePlatform]: string } = {
-			[GamePlatform.SWITCH]: 'Switch.png',
-			[GamePlatform.PC]: 'PC.png',
-			[GamePlatform.STEAM_DECK]: 'Steam Deck.png',
-			[GamePlatform.PS_VITA]: 'PS Vita.png',
-			[GamePlatform.PS2]: 'PS2.png',
-			[GamePlatform.PS1]: 'PS1.png',
-			[GamePlatform.NINTENDO_3DS]: '3DS.png',
-			[GamePlatform.NINTENDO_DS]: 'DS.png',
-			[GamePlatform.GBA]: 'GBA.png',
-			[GamePlatform.PS3]: 'PS3.png',
-			[GamePlatform.PS4]: 'PS4.png',
-			[GamePlatform.PS5]: 'PS5.png',
-			[GamePlatform.DREAMCAST]: 'Dreamcast.png',
-			[GamePlatform.PSP]: 'PSP.png',
-			[GamePlatform.GAMECUBE]: 'GameCube.png',
-			[GamePlatform.GB]: 'GB.png',
-			[GamePlatform.GBC]: 'GBC.png',
-			[GamePlatform.NES]: 'NES.png',
-			[GamePlatform.SNES]: 'SNES.png',
-			[GamePlatform.GENESIS]: 'Genesis.png',
-			[GamePlatform.N64]: 'N64.png',
-			[GamePlatform.VIRTUAL_BOY]: 'Virtual Boy.png',
-			[GamePlatform.WII_U]: 'Wii U.png',
-			[GamePlatform.XBOX]: 'Xbox.png',
-			[GamePlatform.XBOX_360]: 'Xbox 360.png',
-			[GamePlatform.XBOX_ONE]: 'Xbox One.png',
-			[GamePlatform.XBOX_SERIES]: 'Xbox Series.png',
-			[GamePlatform.WII]: 'Wii.png',
-			[GamePlatform.MAME]: 'MAME.png',
-			[GamePlatform.DOS]: 'DOS.png',
-			[GamePlatform.NEO_GEO]: 'Neo Geo.png',
-			[GamePlatform.SEGA_SATURN]: 'Saturn.png',
-			[GamePlatform.ATARI_2600]: 'Atari 2600.png',
-			[GamePlatform.STEAM_DECK_PC]: 'Steam Deck - PC.png'
-		};
-		return logoMap[platform] || '';
 	}
 
 	async downloadRemoteImage(url: string, destFolder: string | null, sourceFile: TFile): Promise<string> {
@@ -912,6 +878,7 @@ export default class GameBacklogPlugin extends Plugin {
 			totalHours: '',
 			totalPlatinums: '',
 			mostUsedPlatform: '',
+			retroAchievementsUrl: '',
 			files: []
 		};
 
@@ -957,6 +924,9 @@ export default class GameBacklogPlugin extends Plugin {
 					break;
 				case 'mostusedplatform':
 					config.mostUsedPlatform = value;
+					break;
+				case 'retroachievements':
+					config.retroAchievementsUrl = value;
 					break;
 				case 'files':
 					config.files = value
@@ -1074,7 +1044,8 @@ export default class GameBacklogPlugin extends Plugin {
 			`totalCompleted: ${config.totalCompleted}`,
 			`totalHours: ${config.totalHours}`,
 			`platinums: ${config.totalPlatinums}`,
-			`mostUsedPlatform: ${config.mostUsedPlatform}`
+			`mostUsedPlatform: ${config.mostUsedPlatform}`,
+			`retroAchievements: ${config.retroAchievementsUrl}`
 		];
 
 		if (config.files.length > 0) {
@@ -1173,6 +1144,32 @@ export default class GameBacklogPlugin extends Plugin {
 				row.createSpan({ cls: 'game-backlog-profile-stat-label-inline', text: `${stat.emoji} ${stat.label}` });
 				row.createSpan({ cls: 'game-backlog-profile-stat-value-inline', text: stat.value || this.t('emptyValue') });
 			});
+
+			if (config.retroAchievementsUrl) {
+				const raBase = 'https://retroachievements.org/user/';
+				const isFullUrl = /^https?:\/\//i.test(config.retroAchievementsUrl);
+				const raFullUrl = isFullUrl
+					? config.retroAchievementsUrl
+					: `${raBase}${config.retroAchievementsUrl}`;
+				const raUsername = isFullUrl
+					? config.retroAchievementsUrl.replace(/\/+$/, '').split('/').pop() || config.retroAchievementsUrl
+					: config.retroAchievementsUrl;
+				const raRow = statsList.createDiv({ cls: 'game-backlog-profile-stat-row game-backlog-profile-ra-row' });
+				raRow.createSpan({ cls: 'game-backlog-profile-stat-label-inline', text: `🏅 ${this.t('profileRetroAchievements')}` });
+				const raLink = raRow.createEl('a', {
+					cls: 'game-backlog-profile-ra-link',
+					text: raUsername,
+					attr: {
+						href: raFullUrl,
+						target: '_blank',
+						rel: 'noopener noreferrer'
+					}
+				});
+				raLink.addEventListener('click', (event) => {
+					event.preventDefault();
+					window.open(raFullUrl, '_blank', 'noopener,noreferrer');
+				});
+			}
 
 			if (backlogFiles.length > 0) {
 				const filesSection = container.createDiv({ cls: 'game-backlog-profile-files' });
@@ -1379,35 +1376,6 @@ export default class GameBacklogPlugin extends Plugin {
 				dlcBadge.textContent = this.t('dlcBadgeAlt');
 			}
 
-			// Visualización de plataforma por modo global
-			if (this.settings.platformMode === 'image') {
-				const brandContainer = card.createDiv({ cls: 'game-brand-logo' });
-				const platformLogo = this.getPlatformLogo(game.platform);
-				const brandImageSource = this.getPluginAssetUrl(platformLogo);
-				const brandFallbackSource = this.getPluginAssetFallbackUrl(platformLogo);
-				const initialBrandSource = brandImageSource || brandFallbackSource;
-				let triedBrandFallback = !brandImageSource;
-				if (initialBrandSource) {
-					const brandImage = brandContainer.createEl('img', {
-						cls: 'game-brand-image',
-						attr: {
-							src: initialBrandSource,
-							alt: game.platform || this.t('platformBrandAlt')
-						}
-					});
-
-					brandImage.onerror = () => {
-						if (!triedBrandFallback && brandFallbackSource) {
-							triedBrandFallback = true;
-							brandImage.src = brandFallbackSource;
-							return;
-						}
-
-						brandImage.remove();
-					};
-				}
-			}
-			
 			// Información del juego
 			const info = card.createDiv({ cls: 'game-info' });
 			
@@ -1946,6 +1914,36 @@ class AddGameModal extends Modal {
 				inputEl.max = String(ratingBounds.max);
 				inputEl.step = '1';
 			}
+		} else if (this.plugin.settings.scoreType === 'stars-5') {
+			const starCount = ratingBounds.max;
+			let currentRating = Math.max(ratingBounds.min, Math.min(starCount, this.rating));
+			const starContainer = ratingSetting.controlEl.createDiv({ cls: 'game-modal-star-picker' });
+
+			const renderStars = () => {
+				starContainer.empty();
+				for (let i = 1; i <= starCount; i++) {
+					const star = starContainer.createSpan({
+						cls: i <= currentRating ? 'star filled game-modal-star' : 'star empty game-modal-star',
+						text: '★'
+					});
+					star.addEventListener('click', () => {
+						currentRating = i;
+						this.rating = i;
+						renderStars();
+					});
+					star.addEventListener('mouseenter', () => {
+						const spans = starContainer.querySelectorAll('span');
+						spans.forEach((s, idx) => {
+							s.className = idx < i ? 'star filled game-modal-star' : 'star empty game-modal-star';
+						});
+					});
+					star.addEventListener('mouseleave', () => {
+						renderStars();
+					});
+				}
+			};
+
+			renderStars();
 		} else {
 			ratingSetting.addSlider(slider => slider
 				.setLimits(ratingBounds.min, ratingBounds.max, 1)
@@ -2455,7 +2453,6 @@ class GameBacklogSettingTab extends PluginSettingTab {
 			.setDesc(this.plugin.t('settingsPlatformModeDesc'))
 			.addDropdown(dropdown => dropdown
 				.addOption('none', this.plugin.t('platformModeNone'))
-				.addOption('image', this.plugin.t('platformModeImage'))
 				.addOption('label', this.plugin.t('platformModeLabel'))
 				.setValue(this.plugin.settings.platformMode)
 				.onChange(async (value) => {

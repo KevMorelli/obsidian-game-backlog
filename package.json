@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-game-backlog",
-	"version": "1.0.0",
+	"version": "1.2.0",
 	"description": "A plugin for Obsidian to track completed games from your game backlog",
 	"main": "main.js",
 	"scripts": {
