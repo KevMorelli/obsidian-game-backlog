@@ -146,7 +146,7 @@ interface GameBacklogProfileConfig {
 }
 
 type PlatformMode = 'none' | 'label';
-type ScoreType = 'stars-5' | 'stars-10' | 'numeric-10';
+type ScoreType = 'stars-5' | 'stars-5-half' | 'stars-10' | 'numeric-10';
 
 interface SGDBGame {
 	id: number;
@@ -203,6 +203,8 @@ export default class GameBacklogPlugin extends Plugin {
 
 	getScoreBounds(): { min: number; max: number } {
 		switch (this.settings.scoreType) {
+			case 'stars-5-half':
+				return { min: 0.5, max: 5 };
 			case 'stars-10':
 				return { min: 1, max: 10 };
 			case 'numeric-10':
@@ -213,8 +215,14 @@ export default class GameBacklogPlugin extends Plugin {
 		}
 	}
 
+	private getScoreStep(): number {
+		return this.settings.scoreType === 'stars-5-half' ? 0.5 : 1;
+	}
+
 	getDefaultRatingValue(): number {
 		switch (this.settings.scoreType) {
+			case 'stars-5-half':
+				return 3;
 			case 'stars-10':
 			case 'numeric-10':
 				return 5;
@@ -225,7 +233,10 @@ export default class GameBacklogPlugin extends Plugin {
 	}
 
 	normalizeRatingValue(rawValue: number): number {
-		const value = Number.isFinite(rawValue) ? Math.round(rawValue) : 0;
+		const step = this.getScoreStep();
+		const value = Number.isFinite(rawValue)
+			? Math.round(rawValue / step) * step
+			: 0;
 		const { max } = this.getScoreBounds();
 		return Math.max(0, Math.min(max, value));
 	}
@@ -237,10 +248,18 @@ export default class GameBacklogPlugin extends Plugin {
 	}
 
 	private renderStars(container: HTMLElement, rating: number, maxStars: number): void {
+		const filledStars = Math.floor(rating);
+		const hasHalfStar = rating - filledStars >= 0.5;
+
 		for (let i = 1; i <= maxStars; i++) {
-			const star = container.createSpan({
-				cls: i <= rating ? 'star filled' : 'star empty'
-			});
+			let starClass = 'star empty';
+			if (i <= filledStars) {
+				starClass = 'star filled';
+			} else if (i === filledStars + 1 && hasHalfStar) {
+				starClass = 'star half';
+			}
+
+			const star = container.createSpan({ cls: starClass });
 			star.textContent = '★';
 		}
 	}
@@ -262,6 +281,7 @@ export default class GameBacklogPlugin extends Plugin {
 				break;
 			}
 			case 'stars-5':
+			case 'stars-5-half':
 			default:
 				this.renderStars(container, normalizedRating, 5);
 				break;
@@ -284,6 +304,7 @@ export default class GameBacklogPlugin extends Plugin {
 				break;
 			}
 			case 'stars-5':
+			case 'stars-5-half':
 			default:
 				this.renderStars(container, normalizedRating, 5);
 				break;
@@ -302,6 +323,9 @@ export default class GameBacklogPlugin extends Plugin {
 				scoreCircle.setAttribute('aria-label', `${this.t('viewRatingLabel')}${normalizedRating}`);
 				break;
 			}
+			case 'stars-5-half':
+				container.textContent = normalizedRating > 0 ? `${normalizedRating.toFixed(1)} ★` : this.t('emptyValue');
+				break;
 			case 'stars-10':
 			case 'stars-5':
 			default:
@@ -568,7 +592,7 @@ export default class GameBacklogPlugin extends Plugin {
 					currentGame.cover = value;
 					break;
 				case 'rating':
-					currentGame.rating = parseInt(value) || 0;
+					currentGame.rating = parseFloat(value) || 0;
 					break;
 				case 'date':
 					currentGame.completionDate = value;
@@ -1914,39 +1938,71 @@ class AddGameModal extends Modal {
 				inputEl.max = String(ratingBounds.max);
 				inputEl.step = '1';
 			}
-		} else if (this.plugin.settings.scoreType === 'stars-5') {
-			const starCount = ratingBounds.max;
-			let currentRating = Math.max(ratingBounds.min, Math.min(starCount, this.rating));
+		} else if (this.plugin.settings.scoreType === 'stars-5' || this.plugin.settings.scoreType === 'stars-5-half') {
+			const starCount = 5;
+			const allowHalfStars = this.plugin.settings.scoreType === 'stars-5-half';
+			let currentRating = Math.max(ratingBounds.min, Math.min(starCount, this.plugin.normalizeRatingValue(this.rating)));
+			let hoverRating: number | null = null;
 			const starContainer = ratingSetting.controlEl.createDiv({ cls: 'game-modal-star-picker' });
+
+			const getStarClass = (starIndex: number, value: number): string => {
+				if (value >= starIndex + 1) return 'star filled';
+				if (value >= starIndex + 0.5) return 'star half';
+				return 'star empty';
+			};
 
 			const renderStars = () => {
 				starContainer.empty();
+				const activeRating = hoverRating ?? currentRating;
+
 				for (let i = 1; i <= starCount; i++) {
 					const star = starContainer.createSpan({
-						cls: i <= currentRating ? 'star filled game-modal-star' : 'star empty game-modal-star',
+						cls: `${getStarClass(i - 1, activeRating)} game-modal-star`,
 						text: '★'
 					});
-					star.addEventListener('click', () => {
-						currentRating = i;
-						this.rating = i;
-						renderStars();
-					});
-					star.addEventListener('mouseenter', () => {
-						const spans = starContainer.querySelectorAll('span');
-						spans.forEach((s, idx) => {
-							s.className = idx < i ? 'star filled game-modal-star' : 'star empty game-modal-star';
+
+					if (allowHalfStars) {
+						const getHalfValue = (event: MouseEvent): number => {
+							const rect = star.getBoundingClientRect();
+							const relativeX = event.clientX - rect.left;
+							const half = relativeX <= rect.width / 2 ? 0.5 : 1;
+							return (i - 1) + half;
+						};
+
+						star.addEventListener('mousemove', (event: MouseEvent) => {
+							hoverRating = getHalfValue(event);
+							renderStars();
 						});
-					});
-					star.addEventListener('mouseleave', () => {
-						renderStars();
-					});
+
+						star.addEventListener('click', (event: MouseEvent) => {
+							currentRating = getHalfValue(event);
+							this.rating = currentRating;
+							renderStars();
+						});
+					} else {
+						star.addEventListener('mouseenter', () => {
+							hoverRating = i;
+							renderStars();
+						});
+
+						star.addEventListener('click', () => {
+							currentRating = i;
+							this.rating = i;
+							renderStars();
+						});
+					}
 				}
 			};
+
+			starContainer.addEventListener('mouseleave', () => {
+				hoverRating = null;
+				renderStars();
+			});
 
 			renderStars();
 		} else {
 			ratingSetting.addSlider(slider => slider
-				.setLimits(ratingBounds.min, ratingBounds.max, 1)
+				.setLimits(ratingBounds.min, ratingBounds.max, this.plugin.settings.scoreType === 'stars-5-half' ? 0.5 : 1)
 				.setValue(Math.max(ratingBounds.min, Math.min(ratingBounds.max, this.rating)))
 				.setDynamicTooltip()
 				.onChange(value => {
@@ -2465,6 +2521,7 @@ class GameBacklogSettingTab extends PluginSettingTab {
 			.setDesc(this.plugin.t('settingsScoreTypeDesc'))
 			.addDropdown(dropdown => dropdown
 				.addOption('stars-5', this.plugin.t('scoreTypeStars5'))
+				.addOption('stars-5-half', this.plugin.t('scoreTypeStars5Half'))
 				.addOption('stars-10', this.plugin.t('scoreTypeStars10'))
 				.addOption('numeric-10', this.plugin.t('scoreTypeNumeric10'))
 				.setValue(this.plugin.settings.scoreType)

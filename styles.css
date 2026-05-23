@@ -316,6 +316,14 @@
 	color: #FFD700;
 }
 
+.star.half {
+	color: transparent;
+	background: linear-gradient(90deg, #FFD700 50%, var(--game-card-text, var(--text-faint)) 50%);
+	-webkit-background-clip: text;
+	background-clip: text;
+	opacity: 1;
+}
+
 .star.empty {
 	color: var(--game-card-text, var(--text-faint));
 	opacity: 0.45;
