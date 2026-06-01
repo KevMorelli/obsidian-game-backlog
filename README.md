@@ -8,20 +8,16 @@ On a MD file press `Control + P` and search for `Game Backlog: Insert game-backl
 This will create a specific block that this widget uses.
 From here you can just use the interactive interface to add new entries.
 
-## 📦 Manual installation
+## 🤖 Setup a profile
+On a MD file press `Control + P` and search for `Game Backlog: Insert game-backlog-profile block`.
+Fill your avatar url and player name and optionally retroAchievements account name.
 
-Releases for this plugin are published on the GitHub repository Releases page.
+This will let you scan for completed games inside all game-backlog blocks in your files and throw you more statistics.
 
-1. Download the latest release files from GitHub Releases:
-	- `main.js`
-	- `manifest.json`
-	- `styles.css`
-2. In your Obsidian vault, open the folder `.obsidian/plugins/game-backlog-tracker/`.
-3. Copy the downloaded files into that folder.
-4. Open Obsidian and go to `Settings > Community plugins`.
-5. Refresh community plugins if needed, then enable `Game Backlog Tracker`.
+❗ This card will not auto update, you need to manually press the update button on the top right.
 
-If the `game-backlog-tracker` folder does not exist yet, create it manually before copying the files.
+<img width="729" height="412" alt="image" src="https://github.com/user-attachments/assets/5f3c546b-d5df-4041-97b6-8ff4deb7a35f" />
+
 
 ## 🎮 Features
 
@@ -37,6 +33,7 @@ If the `game-backlog-tracker` folder does not exist yet, create it manually befo
 - Customizable themes
 - Support for SteamGridDB
 - Support for DLC campaigns
+- Support for profile card
 
 ## ❗ Assets
 
