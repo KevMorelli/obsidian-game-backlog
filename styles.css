@@ -766,13 +766,54 @@
 /* Responsive - móviles */
 @media (max-width: 480px) {
 	.game-backlog-grid {
-		grid-template-columns: repeat(auto-fill, minmax(188px, 188px));
+		grid-template-columns: repeat(auto-fill, minmax(100px, 100px));
 		justify-content: center;
-		gap: 15px;
+		gap: 12px;
+	}
+	
+	.game-card {
+		width: 100px;
+	}
+
+	.game-cover-container {
+		width: 100px;
+		height: 150px;
 	}
 	
 	.game-info {
-		padding: 8px 10px;
+		display: none;
+	}
+
+	.game-card-add {
+		width: 100px !important;
+		height: 150px !important;
+		border-radius: 12px;
+	}
+
+	.game-card-add-icon {
+		font-size: 32px;
+	}
+
+	.game-stats-container {
+		padding: 12px;
+		margin: 15px auto;
+		gap: 12px;
+		max-width: 100%;
+	}
+
+	.game-top-game-row {
+		gap: 8px;
+	}
+
+	.game-top-game-select {
+		padding: 4px 6px;
+		font-size: 12px;
+		min-width: 100px;
+	}
+
+	.game-medal {
+		min-width: 20px;
+		font-size: 16px;
 	}
 	
 	.game-rating {
