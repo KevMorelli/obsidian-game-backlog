@@ -128,6 +128,8 @@ function generateGameId(): string {
 interface BlockConfig {
 	isLocked: boolean;
 	viewMode: 'grid' | 'table';
+	cardWidth: number;
+	toolsCollapsed: boolean;
 	topGame1: string;
 	topGame2: string;
 	topGame3: string;
@@ -217,6 +219,16 @@ export default class GameBacklogPlugin extends Plugin {
 
 	private getScoreStep(): number {
 		return this.settings.scoreType === 'stars-5-half' ? 0.5 : 1;
+	}
+
+	private getCardWidthBounds(): { min: number; max: number } {
+		return { min: 100, max: 188 };
+	}
+
+	normalizeCardWidth(rawValue: number): number {
+		const { min, max } = this.getCardWidthBounds();
+		const value = Number.isFinite(rawValue) ? Math.round(rawValue) : max;
+		return Math.max(min, Math.min(max, value));
 	}
 
 	getDefaultRatingValue(): number {
@@ -344,6 +356,10 @@ export default class GameBacklogPlugin extends Plugin {
 				const defaultPlatform = this.settings.defaultPlatform || GamePlatform.PC;
 				const defaultBlock = [
 					'```game-backlog',
+					'isLocked: false',
+					'viewMode: grid',
+					'cardWidth: 188',
+					'toolsCollapsed: true',
 					'---',
 					'id: ',
 					'name: ',
@@ -854,7 +870,15 @@ export default class GameBacklogPlugin extends Plugin {
 	}
 
 	parseBlockConfig(source: string): BlockConfig {
-		const config: BlockConfig = { isLocked: false, viewMode: 'grid', topGame1: '', topGame2: '', topGame3: '' };
+		const config: BlockConfig = {
+			isLocked: false,
+			viewMode: 'grid',
+			cardWidth: this.getCardWidthBounds().max,
+			toolsCollapsed: true,
+			topGame1: '',
+			topGame2: '',
+			topGame3: ''
+		};
 		const lines = source.split('\n');
 		for (const line of lines) {
 			const trimmed = line.trim();
@@ -866,6 +890,8 @@ export default class GameBacklogPlugin extends Plugin {
 			switch (key) {
 				case 'islocked': config.isLocked = value === 'true'; break;
 				case 'viewmode': config.viewMode = value === 'table' ? 'table' : 'grid'; break;
+				case 'cardwidth': config.cardWidth = this.normalizeCardWidth(parseInt(value, 10)); break;
+				case 'toolscollapsed': config.toolsCollapsed = value !== 'false'; break;
 				case 'topgame1': config.topGame1 = value; break;
 				case 'topgame2': config.topGame2 = value; break;
 				case 'topgame3': config.topGame3 = value; break;
@@ -887,7 +913,7 @@ export default class GameBacklogPlugin extends Plugin {
 		const firstDashIdx = originalBlock.indexOf('---');
 		const entriesPart = firstDashIdx !== -1 ? originalBlock.slice(firstDashIdx) : originalBlock;
 
-		const configSection = `isLocked: ${config.isLocked}\nviewMode: ${config.viewMode}\ntopGame1: ${config.topGame1}\ntopGame2: ${config.topGame2}\ntopGame3: ${config.topGame3}\n`;
+		const configSection = `isLocked: ${config.isLocked}\nviewMode: ${config.viewMode}\ncardWidth: ${config.cardWidth}\ntoolsCollapsed: ${config.toolsCollapsed}\ntopGame1: ${config.topGame1}\ntopGame2: ${config.topGame2}\ntopGame3: ${config.topGame3}\n`;
 		const newBlock = configSection + entriesPart;
 		const newContent = content.replace(codeBlockRegex, '```game-backlog\n' + newBlock + '```');
 		await this.app.vault.modify(file, newContent);
@@ -1253,19 +1279,68 @@ export default class GameBacklogPlugin extends Plugin {
 		
 		// Contenedor principal
 		const container = el.createDiv({ cls: 'game-backlog-container' });
+		const cardWidth = this.normalizeCardWidth(blockConfig.cardWidth);
+		blockConfig.cardWidth = cardWidth;
+		container.style.setProperty('--game-card-width', `${cardWidth}px`);
 		
 		// Estado de vista (tarjetas o tabla)
 		let isTableView = blockConfig.viewMode === 'table';
 		
 		// Contenedor de controles
 		const controlsContainer = container.createDiv({ cls: 'game-backlog-controls' });
+		const toolbarToggleButton = controlsContainer.createEl('button', { cls: 'game-tools-toggle' });
+		const toolsContainer = controlsContainer.createDiv({ cls: 'game-backlog-tools' });
+		const cardSizeControl = toolsContainer.createDiv({ cls: 'game-card-size-control' });
+		cardSizeControl.createSpan({ cls: 'game-card-size-label', text: this.t('cardSizeLabel') });
+		const cardSizeSlider = cardSizeControl.createEl('input', { cls: 'game-card-size-slider' });
+		cardSizeSlider.type = 'range';
+		cardSizeSlider.min = String(this.getCardWidthBounds().min);
+		cardSizeSlider.max = String(this.getCardWidthBounds().max);
+		cardSizeSlider.step = '1';
+		cardSizeSlider.value = String(cardWidth);
+		const cardSizeValue = cardSizeControl.createSpan({ cls: 'game-card-size-value', text: `${cardWidth}px` });
+
+		const setToolsCollapsed = (collapsed: boolean): void => {
+			blockConfig.toolsCollapsed = collapsed;
+			toolsContainer.classList.toggle('is-collapsed', collapsed);
+			toolbarToggleButton.textContent = collapsed ? '<' : '>';
+			toolbarToggleButton.title = collapsed ? this.t('toolbarExpandTitle') : this.t('toolbarCollapseTitle');
+			toolbarToggleButton.setAttribute('aria-label', collapsed ? this.t('toolbarExpandTitle') : this.t('toolbarCollapseTitle'));
+		};
+
+		toolbarToggleButton.addEventListener('click', () => {
+			const isCollapsed = toolsContainer.classList.contains('is-collapsed');
+			setToolsCollapsed(!isCollapsed);
+			void this.saveBlockConfig(ctx, blockConfig);
+		});
+
+		setToolsCollapsed(blockConfig.toolsCollapsed);
+
+		const applyCardWidth = (rawValue: number, shouldPersist: boolean): void => {
+			const normalizedWidth = this.normalizeCardWidth(rawValue);
+			blockConfig.cardWidth = normalizedWidth;
+			container.style.setProperty('--game-card-width', `${normalizedWidth}px`);
+			cardSizeSlider.value = String(normalizedWidth);
+			cardSizeValue.textContent = `${normalizedWidth}px`;
+			renderCards();
+			if (shouldPersist) {
+				void this.saveBlockConfig(ctx, blockConfig);
+			}
+		};
+
+		cardSizeSlider.addEventListener('input', () => {
+			applyCardWidth(Number(cardSizeSlider.value), false);
+		});
+		cardSizeSlider.addEventListener('change', () => {
+			applyCardWidth(Number(cardSizeSlider.value), true);
+		});
 		
 		// Botón de toggle vista
-		const toggleButton = controlsContainer.createEl('button', { cls: 'game-view-toggle', text: isTableView ? '🃏' : '📊' });
+		const toggleButton = toolsContainer.createEl('button', { cls: 'game-view-toggle', text: isTableView ? '🃏' : '📊' });
 		toggleButton.title = this.t('toggleViewTitle');
 
 		// Botón de candado
-		const lockButton = controlsContainer.createEl('button', { cls: 'game-lock-toggle' });
+		const lockButton = toolsContainer.createEl('button', { cls: 'game-lock-toggle' });
 		lockButton.textContent = blockConfig.isLocked ? '🔒' : '🔓';
 		lockButton.title = blockConfig.isLocked ? this.t('lockTitleLocked') : this.t('lockTitleUnlocked');
 		lockButton.addEventListener('click', () => {
@@ -1301,6 +1376,7 @@ export default class GameBacklogPlugin extends Plugin {
 		const renderCards = () => {
 			cardsContainer.empty();
 			const grid = cardsContainer.createDiv({ cls: 'game-backlog-grid' });
+			const compactCards = blockConfig.cardWidth < 135;
 		
 		games.forEach(game => {
 			let card: HTMLElement;
@@ -1400,31 +1476,31 @@ export default class GameBacklogPlugin extends Plugin {
 				dlcBadge.textContent = this.t('dlcBadgeAlt');
 			}
 
-			// Información del juego
-			const info = card.createDiv({ cls: 'game-info' });
-			
-			// Rating (estrellas)
-			const ratingContainer = info.createDiv({ cls: 'game-rating' });
-			this.renderCardRating(ratingContainer, game.rating || 0);
-			
-			// Fecha y plataforma
-			const details = info.createDiv({ cls: 'game-details' });
-			
-			if (game.completionDate) {
-				const date = details.createDiv({ cls: 'game-date' });
-				date.textContent = `📅 ${this.formatCompletionDate(game.completionDate)}`;
-			}
+			if (!compactCards) {
+				// Información del juego
+				const info = card.createDiv({ cls: 'game-info' });
+				
+				// Rating (estrellas)
+				const ratingContainer = info.createDiv({ cls: 'game-rating' });
+				this.renderCardRating(ratingContainer, game.rating || 0);
+				
+				// Fecha y plataforma
+				const details = info.createDiv({ cls: 'game-details' });
+				
+				if (game.completionDate) {
+					const date = details.createDiv({ cls: 'game-date' });
+					date.textContent = `📅 ${this.formatCompletionDate(game.completionDate)}`;
+				}
 
-			if (this.settings.platformMode === 'label' && game.platform) {
-				const platform = details.createDiv({ cls: 'game-platform' });
-				platform.textContent = `🎮 ${game.platform}`;
-			}
+				if (this.settings.platformMode === 'label' && game.platform) {
+					const platform = details.createDiv({ cls: 'game-platform' });
+					platform.textContent = `🎮 ${game.platform}`;
+				}
 
-
-
-			if (game.hours && game.hours > 0) {
-				const hours = details.createDiv({ cls: 'game-hours' });
-				hours.textContent = `⏱️ ${game.hours} hs`;
+				if (game.hours && game.hours > 0) {
+					const hours = details.createDiv({ cls: 'game-hours' });
+					hours.textContent = `⏱️ ${game.hours} hs`;
+				}
 			}
 
 			// Click handler para abrir modal de lectura (siempre disponible)
@@ -1640,6 +1716,7 @@ export default class GameBacklogPlugin extends Plugin {
 					setContainerVisibility(cardsContainer, true);
 					setContainerVisibility(tableContainer, false);
 					toggleButton.textContent = '📊';
+					renderCards();
 				}
 			})();
 		});

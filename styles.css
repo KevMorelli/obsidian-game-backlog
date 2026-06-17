@@ -7,7 +7,7 @@
 /* Grilla de juegos */
 .game-backlog-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(188px, 188px));
+	grid-template-columns: repeat(auto-fill, minmax(var(--game-card-width, 188px), var(--game-card-width, 188px)));
 	justify-content: center;
 	gap: 25px;
 	margin-bottom: 30px;
@@ -18,7 +18,7 @@
 	background: var(--game-card-bg, #35393d);
 	border-radius: 12px;
 	overflow: hidden;
-	width: 188px;
+	width: var(--game-card-width, 188px);
 	border: 1px solid var(--background-modifier-border);
 	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 	transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -101,8 +101,9 @@
 
 /* Contenedor de portada */
 .game-cover-container {
-	width: 188px;
-	height: 253px;
+	width: var(--game-card-width, 188px);
+	aspect-ratio: 2 / 3;
+	height: auto;
 	overflow: hidden;
 	background: var(--background-modifier-border);
 	position: relative;
@@ -143,6 +144,7 @@
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
+	object-position: center;
 	display: block;
 	transition: filter 0.2s ease;
 }
@@ -680,9 +682,82 @@
 	background: transparent !important;
 	border: 2px dashed var(--background-modifier-border) !important;
 	box-shadow: none !important;
-	height: 350px;
+	width: 100%;
+	aspect-ratio: 2 / 3;
+	height: auto;
 	opacity: 0.5;
 	transition: opacity 0.2s ease, border-color 0.2s ease !important;
+}
+
+.game-backlog-controls {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin-bottom: 15px;
+}
+
+.game-tools-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	padding: 0;
+	border-radius: 8px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	cursor: pointer;
+	transition: background 0.2s ease, transform 0.2s ease;
+	font-size: 15px;
+	line-height: 1;
+}
+
+.game-tools-toggle:hover {
+	background: var(--background-tertiary);
+	transform: scale(1.04);
+}
+
+.game-backlog-tools {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.game-backlog-tools.is-collapsed {
+	display: none;
+}
+
+.game-card-size-control {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.game-card-size-label {
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.game-card-size-slider {
+	width: 120px;
+	accent-color: var(--interactive-accent);
+}
+
+.game-card-size-value {
+	min-width: 46px;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
 }
 
 .game-card-add:hover {
@@ -753,7 +828,7 @@
 /* Responsive - tablets */
 @media (max-width: 768px) {
 	.game-backlog-grid {
-		grid-template-columns: repeat(auto-fill, minmax(188px, 188px));
+		grid-template-columns: repeat(auto-fill, minmax(var(--game-card-width, 188px), var(--game-card-width, 188px)));
 		justify-content: center;
 		gap: 20px;
 	}
@@ -765,6 +840,10 @@
 
 /* Responsive - móviles */
 @media (max-width: 480px) {
+	.game-card-size-control {
+		display: none;
+	}
+
 	.game-backlog-grid {
 		grid-template-columns: repeat(auto-fill, minmax(100px, 100px));
 		justify-content: center;
@@ -777,7 +856,8 @@
 
 	.game-cover-container {
 		width: 100px;
-		height: 150px;
+		aspect-ratio: 2 / 3;
+		height: auto;
 	}
 	
 	.game-info {
@@ -786,7 +866,8 @@
 
 	.game-card-add {
 		width: 100px !important;
-		height: 150px !important;
+		aspect-ratio: 2 / 3;
+		height: auto !important;
 		border-radius: 12px;
 	}
 
