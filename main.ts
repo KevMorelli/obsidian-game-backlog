@@ -1900,9 +1900,12 @@ class AddGameModal extends Modal {
 		} else {
 			this.rating = this.plugin.getDefaultRatingValue();
 			this.platform = this.plugin.settings.defaultPlatform;
-			// Fecha actual por defecto
+			// Use local date to avoid UTC day rollover near midnight.
 			const today = new Date();
-			this.completionDate = today.toISOString().split('T')[0];
+			const year = today.getFullYear();
+			const month = String(today.getMonth() + 1).padStart(2, '0');
+			const day = String(today.getDate()).padStart(2, '0');
+			this.completionDate = `${year}-${month}-${day}`;
 		}
 	}
 
@@ -2021,6 +2024,9 @@ class AddGameModal extends Modal {
 			let currentRating = Math.max(ratingBounds.min, Math.min(starCount, this.plugin.normalizeRatingValue(this.rating)));
 			let hoverRating: number | null = null;
 			const starContainer = ratingSetting.controlEl.createDiv({ cls: 'game-modal-star-picker' });
+			const stars: HTMLSpanElement[] = [];
+
+			this.rating = currentRating;
 
 			const getStarClass = (starIndex: number, value: number): string => {
 				if (value >= starIndex + 1) return 'star filled';
@@ -2028,55 +2034,57 @@ class AddGameModal extends Modal {
 				return 'star empty';
 			};
 
-			const renderStars = () => {
-				starContainer.empty();
-				const activeRating = hoverRating ?? currentRating;
+			const paintStars = (value: number) => {
+				stars.forEach((star, index) => {
+					star.className = `${getStarClass(index, value)} game-modal-star`;
+				});
+			};
 
-				for (let i = 1; i <= starCount; i++) {
-					const star = starContainer.createSpan({
-						cls: `${getStarClass(i - 1, activeRating)} game-modal-star`,
-						text: '★'
+			for (let i = 1; i <= starCount; i++) {
+				const star = starContainer.createSpan({
+					cls: 'game-modal-star',
+					text: '★'
+				});
+				stars.push(star);
+
+				if (allowHalfStars) {
+					const getHalfValue = (event: MouseEvent): number => {
+						const rect = star.getBoundingClientRect();
+						const relativeX = event.clientX - rect.left;
+						const half = relativeX <= rect.width / 2 ? 0.5 : 1;
+						return (i - 1) + half;
+					};
+
+					star.addEventListener('mousemove', (event: MouseEvent) => {
+						hoverRating = getHalfValue(event);
+						paintStars(hoverRating);
 					});
 
-					if (allowHalfStars) {
-						const getHalfValue = (event: MouseEvent): number => {
-							const rect = star.getBoundingClientRect();
-							const relativeX = event.clientX - rect.left;
-							const half = relativeX <= rect.width / 2 ? 0.5 : 1;
-							return (i - 1) + half;
-						};
+					star.addEventListener('click', (event: MouseEvent) => {
+						currentRating = getHalfValue(event);
+						this.rating = currentRating;
+						paintStars(currentRating);
+					});
+				} else {
+					star.addEventListener('mouseenter', () => {
+						hoverRating = i;
+						paintStars(hoverRating);
+					});
 
-						star.addEventListener('mousemove', (event: MouseEvent) => {
-							hoverRating = getHalfValue(event);
-							renderStars();
-						});
-
-						star.addEventListener('click', (event: MouseEvent) => {
-							currentRating = getHalfValue(event);
-							this.rating = currentRating;
-							renderStars();
-						});
-					} else {
-						star.addEventListener('mouseenter', () => {
-							hoverRating = i;
-							renderStars();
-						});
-
-						star.addEventListener('click', () => {
-							currentRating = i;
-							this.rating = i;
-							renderStars();
-						});
-					}
+					star.addEventListener('click', () => {
+						currentRating = i;
+						this.rating = i;
+						paintStars(currentRating);
+					});
 				}
-			};
+			}
 
 			starContainer.addEventListener('mouseleave', () => {
 				hoverRating = null;
-				renderStars();
+				paintStars(currentRating);
 			});
 
-			renderStars();
+			paintStars(currentRating);
 		} else {
 			ratingSetting.addSlider(slider => slider
 				.setLimits(ratingBounds.min, ratingBounds.max, this.plugin.settings.scoreType === 'stars-5-half' ? 0.5 : 1)
