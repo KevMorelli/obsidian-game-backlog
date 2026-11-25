@@ -586,6 +586,38 @@
 	text-decoration: underline;
 }
 
+.game-backlog-profile-platforms {
+	padding-top: 12px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.game-backlog-profile-platforms-title {
+	font-size: 14px;
+	color: var(--text-normal);
+	margin-bottom: 8px;
+}
+
+.game-backlog-profile-platforms-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.game-backlog-profile-platform-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 2px 0 2px 12px;
+	font-size: 13px;
+	color: var(--text-muted);
+}
+
+.game-backlog-profile-platform-count {
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
 .game-backlog-profile-files {
 	margin-top: 0;
 	padding-top: 12px;

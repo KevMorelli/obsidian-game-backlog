@@ -130,6 +130,7 @@ interface BlockConfig {
 	viewMode: 'grid' | 'table';
 	cardWidth: number;
 	toolsCollapsed: boolean;
+	showYear: boolean;
 	topGame1: string;
 	topGame2: string;
 	topGame3: string;
@@ -144,7 +145,14 @@ interface GameBacklogProfileConfig {
 	totalPlatinums: string;
 	mostUsedPlatform: string;
 	retroAchievementsUrl: string;
+	showPlatformStats: boolean;
+	platformStats: PlatformStat[];
 	files: string[];
+}
+
+interface PlatformStat {
+	platform: string;
+	count: number;
 }
 
 type PlatformMode = 'none' | 'label';
@@ -360,6 +368,7 @@ export default class GameBacklogPlugin extends Plugin {
 					'viewMode: grid',
 					'cardWidth: 188',
 					'toolsCollapsed: true',
+					'showYear: false',
 					'---',
 					'id: ',
 					'name: ',
@@ -390,6 +399,7 @@ export default class GameBacklogPlugin extends Plugin {
 					'totalHours: ',
 					'platinums: ',
 					'mostUsedPlatform: ',
+					'showPlatformStats: false',
 					'files: ',
 					'```'
 				].join('\n');
@@ -875,6 +885,7 @@ export default class GameBacklogPlugin extends Plugin {
 			viewMode: 'grid',
 			cardWidth: this.getCardWidthBounds().max,
 			toolsCollapsed: true,
+			showYear: false,
 			topGame1: '',
 			topGame2: '',
 			topGame3: ''
@@ -892,6 +903,7 @@ export default class GameBacklogPlugin extends Plugin {
 				case 'viewmode': config.viewMode = value === 'table' ? 'table' : 'grid'; break;
 				case 'cardwidth': config.cardWidth = this.normalizeCardWidth(parseInt(value, 10)); break;
 				case 'toolscollapsed': config.toolsCollapsed = value !== 'false'; break;
+				case 'showyear': config.showYear = value.toLowerCase() === 'true'; break;
 				case 'topgame1': config.topGame1 = value; break;
 				case 'topgame2': config.topGame2 = value; break;
 				case 'topgame3': config.topGame3 = value; break;
@@ -913,7 +925,7 @@ export default class GameBacklogPlugin extends Plugin {
 		const firstDashIdx = originalBlock.indexOf('---');
 		const entriesPart = firstDashIdx !== -1 ? originalBlock.slice(firstDashIdx) : originalBlock;
 
-		const configSection = `isLocked: ${config.isLocked}\nviewMode: ${config.viewMode}\ncardWidth: ${config.cardWidth}\ntoolsCollapsed: ${config.toolsCollapsed}\ntopGame1: ${config.topGame1}\ntopGame2: ${config.topGame2}\ntopGame3: ${config.topGame3}\n`;
+		const configSection = `isLocked: ${config.isLocked}\nviewMode: ${config.viewMode}\ncardWidth: ${config.cardWidth}\ntoolsCollapsed: ${config.toolsCollapsed}\nshowYear: ${config.showYear}\ntopGame1: ${config.topGame1}\ntopGame2: ${config.topGame2}\ntopGame3: ${config.topGame3}\n`;
 		const newBlock = configSection + entriesPart;
 		const newContent = content.replace(codeBlockRegex, '```game-backlog\n' + newBlock + '```');
 		await this.app.vault.modify(file, newContent);
@@ -929,6 +941,8 @@ export default class GameBacklogPlugin extends Plugin {
 			totalPlatinums: '',
 			mostUsedPlatform: '',
 			retroAchievementsUrl: '',
+			showPlatformStats: false,
+			platformStats: [],
 			files: []
 		};
 
@@ -977,6 +991,21 @@ export default class GameBacklogPlugin extends Plugin {
 					break;
 				case 'retroachievements':
 					config.retroAchievementsUrl = value;
+					break;
+				case 'showplatformstats':
+					config.showPlatformStats = value.toLowerCase() === 'true';
+					break;
+				case 'platformstats':
+					config.platformStats = this.sortPlatformStats(value
+						.split('|')
+						.map((item) => {
+							const sepIdx = item.lastIndexOf('=');
+							if (sepIdx === -1) return null;
+							const platform = item.slice(0, sepIdx).trim();
+							const count = parseInt(item.slice(sepIdx + 1).trim(), 10);
+							return platform && Number.isFinite(count) ? { platform, count } : null;
+						})
+						.filter((stat): stat is PlatformStat => stat !== null));
 					break;
 				case 'files':
 					config.files = value
@@ -1069,7 +1098,26 @@ export default class GameBacklogPlugin extends Plugin {
 		return mostUsed || this.t('emptyValue');
 	}
 
+	private sortPlatformStats(stats: PlatformStat[]): PlatformStat[] {
+		return stats
+			.filter((stat) => stat.count > 0)
+			.sort((a, b) => b.count - a.count || a.platform.localeCompare(b.platform, undefined, { sensitivity: 'base' }));
+	}
+
+	private getPlatformStats(games: GameEntry[]): PlatformStat[] {
+		const platformCount = new Map<string, number>();
+		for (const game of games) {
+			const platform = (game.platform || '').trim();
+			if (!platform) continue;
+			platformCount.set(platform, (platformCount.get(platform) ?? 0) + 1);
+		}
+		return this.sortPlatformStats(Array.from(platformCount.entries()).map(([platform, count]) => ({ platform, count })));
+	}
+
 	private isProfileDataEmpty(config: GameBacklogProfileConfig): boolean {
+		if (config.showPlatformStats && config.platformStats.length === 0 && config.totalCompleted !== '0') {
+			return true;
+		}
 		return !config.totalCompleted || !config.totalHours || !config.totalPlatinums || !config.mostUsedPlatform;
 	}
 
@@ -1095,7 +1143,9 @@ export default class GameBacklogPlugin extends Plugin {
 			`totalHours: ${config.totalHours}`,
 			`platinums: ${config.totalPlatinums}`,
 			`mostUsedPlatform: ${config.mostUsedPlatform}`,
-			`retroAchievements: ${config.retroAchievementsUrl}`
+			`retroAchievements: ${config.retroAchievementsUrl}`,
+			`showPlatformStats: ${config.showPlatformStats}`,
+			`platformStats: ${config.platformStats.map((stat) => `${stat.platform}=${stat.count}`).join(' | ')}`
 		];
 
 		if (config.files.length > 0) {
@@ -1124,6 +1174,7 @@ export default class GameBacklogPlugin extends Plugin {
 		config.totalHours = formattedHours;
 		config.totalPlatinums = String(totalPlatinums);
 		config.mostUsedPlatform = mostUsedPlatform;
+		config.platformStats = this.getPlatformStats(games);
 		config.files = Array.from(new Set(backlogFiles.map((file) => file.path)));
 
 		await this.saveProfileBlockData(ctx, config);
@@ -1218,6 +1269,17 @@ export default class GameBacklogPlugin extends Plugin {
 				raLink.addEventListener('click', (event) => {
 					event.preventDefault();
 					window.open(raFullUrl, '_blank', 'noopener,noreferrer');
+				});
+			}
+
+			if (config.showPlatformStats && config.platformStats.length > 0) {
+				const platformSection = container.createDiv({ cls: 'game-backlog-profile-platforms' });
+				platformSection.createDiv({ cls: 'game-backlog-profile-platforms-title', text: `🕹️ ${this.t('profilePlatformStatsTitle')}` });
+				const platformList = platformSection.createDiv({ cls: 'game-backlog-profile-platforms-list' });
+				config.platformStats.forEach((stat) => {
+					const row = platformList.createDiv({ cls: 'game-backlog-profile-platform-row' });
+					row.createSpan({ cls: 'game-backlog-profile-platform-name', text: stat.platform });
+					row.createSpan({ cls: 'game-backlog-profile-platform-count', text: String(stat.count) });
 				});
 			}
 
@@ -1489,7 +1551,10 @@ export default class GameBacklogPlugin extends Plugin {
 				
 				if (game.completionDate) {
 					const date = details.createDiv({ cls: 'game-date' });
-					date.textContent = `📅 ${this.formatCompletionDate(game.completionDate)}`;
+					const formattedDate = blockConfig.showYear
+						? this.formatCompletionDateWithYear(game.completionDate)
+						: this.formatCompletionDate(game.completionDate);
+					date.textContent = `📅 ${formattedDate}`;
 				}
 
 				if (this.settings.platformMode === 'label' && game.platform) {
